@@ -64,7 +64,7 @@ paladin/
 │       │   ├── api/                # REST + WebSocket routers
 │       │   ├── engine/
 │       │   │   ├── grid.py         # station graph: buses, servers, thermal nodes (networkx)
-│       │   │   ├── physics/        # thermal diffusion, electrical load models (numpy)
+│       │   │   ├── physics/        # thermal diffusion, electrical load models (plain Python, see #12)
 │       │   │   ├── routing/        # workload migration and packet routing math (networkx)
 │       │   │   └── faults.py       # fault injection: flare, puncture, breach
 │       │   ├── agents/
