@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://paladin.dev/schemas/telemetry.schema.json",
+  "title": "PALADIN Telemetry Grid",
+  "description": "A single snapshot of PALADIN-Station's tactical telemetry grid: nodes, the edges connecting them, and any active faults.",
+  "type": "object",
+  "required": ["tick", "timestamp", "nodes", "edges"],
+  "properties": {
+    "tick": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The simulation tick this snapshot was captured at."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "activeFaults": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fault" }
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/edge" }
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["id", "type", "position", "status", "metrics"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["server", "power_bus", "thermal_zone", "transformer", "battery", "radiator"]
+        },
+        "position": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" }
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["nominal", "degraded", "critical", "offline"]
+        },
+        "metrics": {
+          "type": "object",
+          "description": "Node-type-specific telemetry. Not every field applies to every node type.",
+          "properties": {
+            "powerLoadPercent": { "type": "number", "minimum": 0, "maximum": 100 },
+            "temperatureCelsius": { "type": "number" },
+            "coolantFlowRate": { "type": "number", "minimum": 0 },
+            "batteryChargePercent": { "type": "number", "minimum": 0, "maximum": 100 },
+            "networkUtilisationPercent": { "type": "number", "minimum": 0, "maximum": 100 }
+          }
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["id", "type", "from", "to", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["power_line", "coolant_line", "network_link"]
+        },
+        "from": { "type": "string", "description": "Node id." },
+        "to": { "type": "string", "description": "Node id." },
+        "status": {
+          "type": "string",
+          "enum": ["nominal", "congested", "severed"]
+        },
+        "capacity": { "type": "number", "minimum": 0 },
+        "currentFlow": { "type": "number", "minimum": 0 }
+      }
+    },
+    "fault": {
+      "type": "object",
+      "required": ["id", "type", "affectedNodeIds", "severity"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["solar_flare", "micrometeoroid_puncture", "cooling_breach"]
+        },
+        "affectedNodeIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["p1", "p2", "p3"]
+        }
+      }
+    }
+  }
+}
