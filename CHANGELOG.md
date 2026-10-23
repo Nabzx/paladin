@@ -7,3 +7,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 ### Added
 
 - Initial repository scaffolding: conventions, labels, templates, and documentation structure.
+- Project PALADIN domain model, proposed architecture, and telemetry/agent-protocol JSON schemas.
+- ADR-0001: stack and rendering engine (Next.js/Tailwind/PixiJS frontend, FastAPI/Python backend).
+- `apps/web` and `apps/sim` scaffolding, proven to talk to each other end to end.
+- Disposable PixiJS pan/zoom rendering prototype at `prototypes/console-render`.
