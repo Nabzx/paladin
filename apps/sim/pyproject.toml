@@ -1,0 +1,10 @@
+[project]
+name = "paladin-sim"
+version = "0.1.0"
+description = "PALADIN-Station simulation engine: physics, routing, agents, and the ATHENA verification gate."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.162.0",
+    "uvicorn[standard]>=0.54.0",
+]
