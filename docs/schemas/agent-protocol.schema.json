@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://paladin.dev/schemas/agent-protocol.schema.json",
+  "title": "PALADIN Agent Communication Protocol",
+  "description": "The asynchronous message envelope exchanged between the five agents, the simulation engine, and the frontend.",
+  "type": "object",
+  "required": ["messageId", "timestamp", "from", "type", "payload"],
+  "properties": {
+    "messageId": { "type": "string" },
+    "correlationId": {
+      "type": "string",
+      "description": "Set on a response to the messageId of the request it answers."
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "from": { "$ref": "#/$defs/agentId" },
+    "to": {
+      "description": "Omitted for a broadcast message.",
+      "$ref": "#/$defs/agentId"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "status_broadcast",
+        "fault_alert",
+        "fix_proposal",
+        "validation_request",
+        "validation_result",
+        "commit",
+        "rollback"
+      ]
+    },
+    "payload": {
+      "description": "Shape depends on type. See the $defs below.",
+      "oneOf": [
+        { "$ref": "#/$defs/statusBroadcastPayload" },
+        { "$ref": "#/$defs/faultAlertPayload" },
+        { "$ref": "#/$defs/fixProposalPayload" },
+        { "$ref": "#/$defs/validationRequestPayload" },
+        { "$ref": "#/$defs/validationResultPayload" },
+        { "$ref": "#/$defs/commitPayload" },
+        { "$ref": "#/$defs/rollbackPayload" }
+      ]
+    }
+  },
+  "$defs": {
+    "agentId": {
+      "type": "string",
+      "enum": ["orion", "vulcan", "tesla", "mercury", "athena"]
+    },
+    "statusBroadcastPayload": {
+      "type": "object",
+      "required": ["summary"],
+      "properties": {
+        "summary": { "type": "string" },
+        "nodeIds": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "faultAlertPayload": {
+      "type": "object",
+      "required": ["faultId", "faultType", "affectedNodeIds", "severity"],
+      "properties": {
+        "faultId": { "type": "string" },
+        "faultType": {
+          "type": "string",
+          "enum": ["solar_flare", "micrometeoroid_puncture", "cooling_breach"]
+        },
+        "affectedNodeIds": { "type": "array", "items": { "type": "string" } },
+        "severity": { "type": "string", "enum": ["p1", "p2", "p3"] }
+      }
+    },
+    "fixProposalPayload": {
+      "type": "object",
+      "required": ["proposalId", "faultId", "action", "targetNodeIds"],
+      "properties": {
+        "proposalId": { "type": "string" },
+        "faultId": { "type": "string" },
+        "action": {
+          "type": "string",
+          "description": "The concrete change being proposed, for example reroute_circuit, migrate_workload, open_coolant_valve."
+        },
+        "targetNodeIds": { "type": "array", "items": { "type": "string" } },
+        "expectedEffect": { "type": "string" }
+      }
+    },
+    "validationRequestPayload": {
+      "type": "object",
+      "required": ["proposalId"],
+      "properties": {
+        "proposalId": { "type": "string" }
+      }
+    },
+    "validationResultPayload": {
+      "type": "object",
+      "required": ["proposalId", "verdict", "reasoning"],
+      "properties": {
+        "proposalId": { "type": "string" },
+        "verdict": { "type": "string", "enum": ["pass", "fail"] },
+        "reasoning": {
+          "type": "string",
+          "description": "Human-readable explanation of the verdict, backed by the rule-based checker's constraint evaluation."
+        },
+        "violatedConstraints": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "commitPayload": {
+      "type": "object",
+      "required": ["proposalId"],
+      "properties": {
+        "proposalId": { "type": "string" }
+      }
+    },
+    "rollbackPayload": {
+      "type": "object",
+      "required": ["proposalId", "reason"],
+      "properties": {
+        "proposalId": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    }
+  }
+}
