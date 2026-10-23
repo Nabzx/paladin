@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: proposed. The frontend/backend split below follows the brief's suggested stack. It's a working assumption, not yet locked in as an ADR, pending the Phase 1 stack and rendering-engine research ticket.
+> Status: confirmed by [ADR-0001](../adr/0001-stack-and-rendering.md). The frontend/backend split and libraries below are settled. The physics model, routing math, and ATHENA's verification model are still open, see the Phase 1 map issue.
 
 ## System overview
 
@@ -51,7 +51,7 @@ paladin/
 │   ├── web/                        # Next.js + Tailwind frontend
 │   │   ├── app/                    # routes
 │   │   ├── components/
-│   │   │   ├── console/            # tactical grid: canvas/WebGL render, pan/zoom
+│   │   │   ├── console/            # tactical grid: PixiJS render, pixi-viewport pan/zoom
 │   │   │   ├── ops-deck/           # agent stream panel, avatars, mission log
 │   │   │   └── ui/                 # shared primitives
 │   │   ├── lib/
@@ -63,9 +63,9 @@ paladin/
 │       ├── paladin_sim/
 │       │   ├── api/                # REST + WebSocket routers
 │       │   ├── engine/
-│       │   │   ├── grid.py         # station graph: buses, servers, thermal nodes
-│       │   │   ├── physics/        # thermal diffusion, electrical load models
-│       │   │   ├── routing/        # workload migration and packet routing math
+│       │   │   ├── grid.py         # station graph: buses, servers, thermal nodes (networkx)
+│       │   │   ├── physics/        # thermal diffusion, electrical load models (numpy)
+│       │   │   ├── routing/        # workload migration and packet routing math (networkx)
 │       │   │   └── faults.py       # fault injection: flare, puncture, breach
 │       │   ├── agents/
 │       │   │   ├── orion.py
@@ -95,7 +95,6 @@ paladin/
 
 Tracked as research tickets rather than decided here:
 
-- Stack and 2D rendering engine (frontend canvas/WebGL library, backend host).
 - Physical emulation model for thermal and electrical loads.
 - Routing and scheduling math for workload migration and packet rerouting.
 - Athena's verification model: rule-based now, SMT-backed (for example Z3) later.
