@@ -95,6 +95,11 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "affectedEdgeIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Set when the fault targets a specific edge directly, for example the coolant_line a cooling_breach severs, rather than only the nodes it touches."
+        },
         "severity": {
           "type": "string",
           "enum": ["p1", "p2", "p3"]

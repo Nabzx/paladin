@@ -65,6 +65,7 @@
           "enum": ["solar_flare", "micrometeoroid_puncture", "cooling_breach"]
         },
         "affectedNodeIds": { "type": "array", "items": { "type": "string" } },
+        "affectedEdgeIds": { "type": "array", "items": { "type": "string" } },
         "severity": { "type": "string", "enum": ["p1", "p2", "p3"] }
       }
     },
