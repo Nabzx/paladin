@@ -80,6 +80,14 @@
           "description": "The concrete change being proposed, for example reroute_circuit, migrate_workload, open_coolant_valve."
         },
         "targetNodeIds": { "type": "array", "items": { "type": "string" } },
+        "sourceNodeId": {
+          "type": "string",
+          "description": "The node this fix moves load or traffic away from, used by actions like migrate_workload. Not every action needs one."
+        },
+        "loadDelta": {
+          "type": "number",
+          "description": "The magnitude of load this fix moves, in the same units as powerLoadPercent. Used by actions like migrate_workload."
+        },
         "expectedEffect": { "type": "string" }
       }
     },
