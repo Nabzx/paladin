@@ -23,3 +23,17 @@ def test_power_balance_fails_when_target_overloaded() -> None:
 
     assert not passed
     assert "SRV-02" in reason
+
+
+def test_power_balance_ignores_unrelated_critical_nodes() -> None:
+    graph = build_sample_topology().graph
+    graph.nodes["SRV-03"]["metrics"]["powerLoadPercent"] = 100.0
+    graph.nodes["SRV-03"]["status"] = "critical"
+    state = SimulationState(graph=graph)
+    fix = {"action": "migrate_workload", "sourceNodeId": "SRV-01", "targetNodeIds": ["SRV-02"], "loadDelta": 20.0}
+
+    projected = project_one_tick(state, fix)
+    passed, reason = check_power_balance(projected, fix)
+
+    assert passed
+    assert reason is None
