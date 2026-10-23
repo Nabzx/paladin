@@ -9,3 +9,9 @@ uv run uvicorn paladin_sim.api.main:app --reload
 ```
 
 Serves `GET /health` and a placeholder `WS /ws` on `http://localhost:8000`.
+
+## Test it
+
+```
+uv run pytest
+```

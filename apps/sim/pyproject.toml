@@ -6,5 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.162.0",
+    "networkx>=3.7",
     "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "jsonschema>=4.26.0",
+    "pytest>=9.1.1",
 ]
