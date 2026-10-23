@@ -11,6 +11,7 @@ Ticket #6 needed ATHENA's Phase 1 verification approach: deterministic, zero-hal
 ## Decision
 
 - Four pure constraint checks: power balance, thermal limits, topology connectivity, and a one-tick-forward no-secondary-cascade projection.
+- The fourth constraint checks two things, not one: no previously nominal or degraded node flips to critical as a side effect, **and** the node(s) named in the fault the proposal is meant to fix show a projected improvement (falling temperature, easing load). A fix that is merely harmless but does nothing must fail this check, not pass it. Found by grilling the ADRs against a concrete scenario, see `docs/research/issue-10-grilling-the-adrs.md`.
 - Each written as an explicit inequality or reachability predicate, not imperative branching, so a later Z3 encoding can reuse the same constraint set.
 - `validationResultPayload.violatedConstraints` already carries the result, no schema change.
 
