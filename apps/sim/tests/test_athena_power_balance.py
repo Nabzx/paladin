@@ -14,6 +14,17 @@ def test_power_balance_passes_for_a_healthy_migration() -> None:
     assert reason is None
 
 
+def test_power_balance_passes_for_a_reroute_with_no_source_node() -> None:
+    state = SimulationState(graph=build_sample_topology().graph)
+    fix = {"action": "reroute_circuit", "targetNodeIds": ["SRV-01", "SRV-03", "SRV-02"]}
+
+    projected = project_one_tick(state, fix)
+    passed, reason = check_power_balance(projected, fix)
+
+    assert passed
+    assert reason is None
+
+
 def test_power_balance_fails_when_target_overloaded() -> None:
     state = SimulationState(graph=build_sample_topology().graph)
     fix = {"action": "migrate_workload", "sourceNodeId": "SRV-01", "targetNodeIds": ["SRV-02"], "loadDelta": 90.0}
