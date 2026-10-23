@@ -15,7 +15,7 @@ The project exists to demonstrate systems-engineering and formal-verification ca
 
 ## The five-agent squad
 
-- **ORION** — Command Orchestrator. Manages service-level compliance, task distribution across the other four agents, and final validation handshakes.
+- **ORION** — Command Orchestrator. Manages service-level compliance and task distribution across the other four agents, and turns Athena's verdict into a commit or rollback, the "final validation handshake" is Orion acting on Athena's verdict, not a second validation pass.
 - **VULCAN** — Thermal & Fluids Governor. Runs the physics loop for ambient dissipation, coolant velocity, and hydraulic radiator arrays.
 - **TESLA** — Electrical Grid Overseer. Governs circuit topology, dynamic transformer load, phase alignment, and battery discharge rate.
 - **MERCURY** — Workload & Network Router. Handles live VM and container migration, packet rerouting, and low-latency channel routing.
@@ -24,7 +24,7 @@ The project exists to demonstrate systems-engineering and formal-verification ca
 ## Core vocabulary
 
 - **Telemetry grid** — the live 2D snapshot of station state: nodes (servers, power buses, thermal zones) and the edges connecting them (power lines, coolant lines, network links), each carrying position, status, and metrics.
-- **Fault** — an injected anomaly (solar flare, micrometeoroid puncture, cooling breach) that perturbs one or more nodes and must be resolved by the squad.
+- **Fault** — an injected anomaly (solar flare, micrometeoroid puncture, cooling breach) that perturbs one or more nodes or edges and must be resolved by the squad.
 - **Fix proposal** — a concrete change an agent proposes to resolve a fault, for example rerouting a circuit, migrating a workload, or opening a coolant valve.
 - **Validation handshake** — the exchange between a proposing agent and Athena: a fix proposal goes in, a pass or fail verdict (with reasoning) comes out. Nothing is applied to station state without a pass.
 - **Simulation tick** — one fixed-timestep step of the physics and routing engine, used to advance station state and settle the effect of applied fixes.

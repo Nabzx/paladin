@@ -41,7 +41,7 @@ validation gate"]
     Athena -- fail --> Agents
 ```
 
-A fault perturbs the engine's station graph. The relevant agent (VULCAN, TESLA, or MERCURY) proposes a fix. ORION coordinates if more than one agent is involved. Every fix passes through ATHENA before the engine applies it. The API layer streams the resulting telemetry and agent activity to the frontend over WebSocket.
+A fault perturbs the engine's station graph. The relevant agent (VULCAN, TESLA, or MERCURY) proposes a fix. ORION coordinates if more than one agent is involved. ATHENA is the only one who validates a proposal; ORION takes ATHENA's verdict and either commits the fix to engine state or signals a rollback, it doesn't validate a second time itself. The API layer streams the resulting telemetry and agent activity to the frontend over WebSocket.
 
 ## File structure
 
