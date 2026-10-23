@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: confirmed by [ADR-0001](../adr/0001-stack-and-rendering.md). The frontend/backend split and libraries below are settled. The physics model, routing math, and ATHENA's verification model are still open, see the Phase 1 map issue.
+> Status: fully confirmed. Stack and rendering ([ADR-0001](../adr/0001-stack-and-rendering.md)), physical emulation ([ADR-0002](../adr/0002-physical-emulation.md)), routing math ([ADR-0003](../adr/0003-routing-math.md)), and ATHENA's verification model ([ADR-0004](../adr/0004-athena-verification.md)) are all settled. What's below is the Phase 1 blueprint; Phase 2 builds it.
 
 ## System overview
 
@@ -93,10 +93,4 @@ paladin/
 
 ## Open questions
 
-Tracked as research tickets rather than decided here:
-
-- Physical emulation model for thermal and electrical loads.
-- Routing and scheduling math for workload migration and packet rerouting.
-- Athena's verification model: rule-based now, SMT-backed (for example Z3) later.
-
-See the Phase 1 map issue for the tickets covering each of these.
+None remaining from Phase 1. One constraint carries forward into Phase 2's engine design: ATHENA's no-secondary-cascade check (ADR-0004) needs `sim_loop.py` to support a cheap, disposable one-tick-forward projection.
