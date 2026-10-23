@@ -11,3 +11,5 @@ All notable changes to this project are documented here. Format follows [Keep a 
 - ADR-0001: stack and rendering engine (Next.js/Tailwind/PixiJS frontend, FastAPI/Python backend).
 - `apps/web` and `apps/sim` scaffolding, proven to talk to each other end to end.
 - Disposable PixiJS pan/zoom rendering prototype at `prototypes/console-render`.
+- ADR-0002, ADR-0003, ADR-0004: physical emulation, routing math, and ATHENA's verification model.
+- Phase 1 complete: the engine's architecture, data contracts, and algorithms are all settled.
