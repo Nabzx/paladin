@@ -68,3 +68,14 @@ def test_thermal_limits_reports_every_overheated_zone() -> None:
     assert not passed
     assert "THERM-N" in reason
     assert "THERM-S" in reason
+
+
+def test_thermal_limits_ignores_a_touched_id_not_in_the_graph() -> None:
+    state = SimulationState(graph=build_sample_topology().graph)
+    fix = {"action": "reroute_circuit", "targetNodeIds": ["DOES-NOT-EXIST"]}
+
+    projected = project_one_tick(state, fix)
+    passed, reason = check_thermal_limits(projected, fix)
+
+    assert passed
+    assert reason is None
