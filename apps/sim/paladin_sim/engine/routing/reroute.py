@@ -2,12 +2,7 @@
 
 import networkx as nx
 
-
-def _effective_capacity(data: dict) -> float:
-    if data["status"] == "severed":
-        return 0.0
-    capacity = data["capacity"] or 0.0
-    return capacity * 0.5 if data["status"] == "congested" else capacity
+from paladin_sim.engine.graph_utils import effective_capacity
 
 
 def live_network_graph(graph: nx.DiGraph) -> nx.Graph:
@@ -21,7 +16,7 @@ def live_network_graph(graph: nx.DiGraph) -> nx.Graph:
     for u, v, data in graph.edges(data=True):
         if data["type"] != "network_link":
             continue
-        capacity = _effective_capacity(data)
+        capacity = effective_capacity(data)
         if capacity == 0.0:
             continue
         remaining = max(capacity - (data["current_flow"] or 0.0), 0.01)
