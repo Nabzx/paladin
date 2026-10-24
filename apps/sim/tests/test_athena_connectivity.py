@@ -12,3 +12,17 @@ def test_connectivity_passes_for_a_healthy_migration() -> None:
 
     assert passed
     assert reason is None
+
+
+def test_connectivity_fails_when_server_loses_power_path() -> None:
+    graph = build_sample_topology().graph
+    graph.edges["TRANSFORMER-1", "SRV-01"]["status"] = "severed"
+    state = SimulationState(graph=graph)
+    fix = {"action": "reroute_circuit", "targetNodeIds": ["SRV-01"]}
+
+    projected = project_one_tick(state, fix)
+    passed, reason = check_connectivity(projected, fix)
+
+    assert not passed
+    assert "SRV-01" in reason
+    assert "power path" in reason
