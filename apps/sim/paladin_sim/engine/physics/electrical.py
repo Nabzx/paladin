@@ -2,28 +2,15 @@
 
 import networkx as nx
 
+from paladin_sim.engine.graph_utils import effective_capacity, power_line_predecessors
+
 DEGRADED_THRESHOLD = 85.0
 CRITICAL_THRESHOLD = 100.0
 DEFAULT_DISCHARGE_RATE = 5.0
 
 
-def _power_line_predecessors(graph: nx.DiGraph, node_id: str) -> list[tuple[str, dict]]:
-    return [
-        (u, data)
-        for u, _, data in graph.in_edges(node_id, data=True)
-        if data["type"] == "power_line"
-    ]
-
-
-def _effective_capacity(data: dict) -> float:
-    if data["status"] == "severed":
-        return 0.0
-    capacity = data["capacity"] or 0.0
-    return capacity * 0.5 if data["status"] == "congested" else capacity
-
-
 def _feeding_capacity(graph: nx.DiGraph, server_id: str) -> float:
-    predecessors = _power_line_predecessors(graph, server_id)
+    predecessors = power_line_predecessors(graph, server_id)
     return predecessors[0][1]["capacity"] or 0.0 if predecessors else 0.0
 
 
@@ -57,7 +44,7 @@ def _find_reachable_battery(graph: nx.DiGraph, server_id: str) -> str | None:
         seen.add(current)
         if graph.nodes[current]["type"] == "battery":
             return current
-        for upstream_id, data in _power_line_predecessors(graph, current):
+        for upstream_id, data in power_line_predecessors(graph, current):
             if data["status"] != "severed":
                 frontier.append(upstream_id)
     return None
@@ -85,14 +72,14 @@ def step_electrical(graph: nx.DiGraph, discharge_rate: float = DEFAULT_DISCHARGE
     demand_cache: dict[str, float] = {}
     availability: dict[str, float] = {}
 
-    roots = [n for n, d in graph.nodes(data=True) if d["type"] != "server" and not _power_line_predecessors(graph, n)]
+    roots = [n for n, d in graph.nodes(data=True) if d["type"] != "server" and not power_line_predecessors(graph, n)]
 
     def propagate(node_id: str, inherited_ratio: float) -> None:
         for _, child_id, data in graph.out_edges(node_id, data=True):
             if data["type"] != "power_line":
                 continue
             child_demand = _downstream_demand(graph, child_id, demand_cache)
-            edge_ratio = 1.0 if child_demand == 0 else min(1.0, _effective_capacity(data) / child_demand)
+            edge_ratio = 1.0 if child_demand == 0 else min(1.0, effective_capacity(data) / child_demand)
             combined_ratio = min(inherited_ratio, edge_ratio)
             if graph.nodes[child_id]["type"] == "server":
                 availability[child_id] = combined_ratio
