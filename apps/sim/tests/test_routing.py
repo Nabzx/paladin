@@ -30,6 +30,14 @@ def test_migration_target_found_for_overloaded_server() -> None:
     assert target in {"SRV-02", "SRV-03"}
 
 
+def test_migration_target_skips_an_excluded_candidate() -> None:
+    graph = build_sample_topology().graph
+
+    target = find_migration_target(graph, "SRV-01", workload_load=20.0, excluded_target_ids={"SRV-02"})
+
+    assert target == "SRV-03"
+
+
 def test_migration_returns_none_when_no_server_has_headroom() -> None:
     graph = build_sample_topology().graph
     graph.nodes["SRV-01"]["metrics"]["powerLoadPercent"] = 90.0

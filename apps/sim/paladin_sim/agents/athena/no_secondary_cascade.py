@@ -31,6 +31,14 @@ def check_no_secondary_cascade(
     bar, see #10's grilling and this issue's research comment. Compares
     post_state against a counterfactual, the same pre_state projected one
     tick with no fix at all, rather than against pre_state directly.
+
+    The improvement bar only applies to nodes that are actually
+    deteriorating without intervention (temperature rising, load not
+    settling), found via #17: a reroute_circuit fix doesn't change any
+    node's own metrics at all, it changes which path future packets take,
+    something this engine doesn't track per-node. Requiring improvement
+    on a node that was never getting worse in the first place would reject
+    every reroute, regardless of whether it genuinely helps.
     """
     counterfactual = project_one_tick(pre_state, None)
 
@@ -44,16 +52,25 @@ def check_no_secondary_cascade(
         return False, f"this fix causes new critical node(s) that wouldn't happen otherwise: {', '.join(new_criticals)}"
 
     affected_ids = fault.get("affectedNodeIds", [])
-    if affected_ids:
+    deteriorating_ids = [
+        node_id
+        for node_id in affected_ids
+        if node_id in pre_state.graph.nodes
+        and node_id in counterfactual.graph.nodes
+        and _measurably_better(
+            counterfactual.graph.nodes[node_id]["metrics"],
+            pre_state.graph.nodes[node_id]["metrics"],
+        )
+    ]
+    if deteriorating_ids:
         improved = any(
             _measurably_better(
                 counterfactual.graph.nodes[node_id]["metrics"],
                 post_state.graph.nodes[node_id]["metrics"],
             )
-            for node_id in affected_ids
-            if node_id in counterfactual.graph.nodes and node_id in post_state.graph.nodes
+            for node_id in deteriorating_ids
         )
         if not improved:
-            return False, f"fix does no better than doing nothing for: {', '.join(affected_ids)}"
+            return False, f"fix does no better than doing nothing for: {', '.join(deteriorating_ids)}"
 
     return True, None
