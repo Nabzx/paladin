@@ -13,6 +13,24 @@ def test_thermal_zone_is_stable_at_nominal_load() -> None:
     assert abs(graph.nodes["THERM-N"]["metrics"]["temperatureCelsius"] - baseline) < 0.5
 
 
+def test_every_thermal_zone_is_stable_at_nominal_load() -> None:
+    """Regression test: THERM-S had no cooling path at all until #27, so it
+    rose every tick even at nominal load, with zero faults. Every thermal
+    zone in the sample topology must stay bounded over many ticks, not just
+    the one previous tests happened to check.
+    """
+    graph = build_sample_topology().graph
+    thermal_zones = [n for n, d in graph.nodes(data=True) if d["type"] == "thermal_zone"]
+    baselines = {zone_id: graph.nodes[zone_id]["metrics"]["temperatureCelsius"] for zone_id in thermal_zones}
+
+    for _ in range(50):
+        step_thermal(graph)
+
+    for zone_id in thermal_zones:
+        current = graph.nodes[zone_id]["metrics"]["temperatureCelsius"]
+        assert abs(current - baselines[zone_id]) < 5.0, f"{zone_id} drifted from {baselines[zone_id]} to {current}"
+
+
 def test_rising_server_load_raises_connected_thermal_zone_temperature() -> None:
     graph = build_sample_topology().graph
     baseline = graph.nodes["THERM-N"]["metrics"]["temperatureCelsius"]

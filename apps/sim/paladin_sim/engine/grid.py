@@ -121,6 +121,7 @@ def build_sample_topology() -> StationGraph:
     station.add_edge("E-SRV02-THERMN", "coolant_line", "SRV-02", "THERM-N", capacity=10.0, current_flow=5.0)
     station.add_edge("E-SRV03-THERMS", "coolant_line", "SRV-03", "THERM-S", capacity=10.0, current_flow=5.0)
     station.add_edge("E-THERMN-RAD1", "coolant_line", "THERM-N", "RAD-1", capacity=10.0, current_flow=5.0)
+    station.add_edge("E-THERMS-RAD1", "coolant_line", "THERM-S", "RAD-1", capacity=10.0, current_flow=2.5)
 
     station.add_edge("E-SRV01-SRV02", "network_link", "SRV-01", "SRV-02", capacity=1000.0, current_flow=100.0)
     station.add_edge("E-SRV02-SRV03", "network_link", "SRV-02", "SRV-03", capacity=1000.0, current_flow=100.0)
