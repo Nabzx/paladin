@@ -20,3 +20,21 @@ def test_check_fix_passes_all_four_constraints() -> None:
 
     assert result["verdict"] == "pass"
     assert "violatedConstraints" not in result
+
+
+def test_check_fix_reports_every_violated_constraint() -> None:
+    graph = build_sample_topology().graph
+    fault = inject_cooling_breach(graph, "F-1", "THERM-N", "RAD-1")
+    pre_state = SimulationState(graph=graph)
+    fix = {
+        "proposalId": "P-2",
+        "action": "migrate_workload",
+        "sourceNodeId": "SRV-01",
+        "targetNodeIds": ["SRV-02"],
+        "loadDelta": 90.0,
+    }
+
+    result = check_fix(fix, fault, pre_state)
+
+    assert result["verdict"] == "fail"
+    assert set(result["violatedConstraints"]) == {"power_balance", "no_secondary_cascade"}
