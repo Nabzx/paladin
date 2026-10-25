@@ -1,7 +1,20 @@
+import json
+from pathlib import Path
+
+import jsonschema
+
 from paladin_sim.agents import orion
 from paladin_sim.engine.faults import inject_cooling_breach, inject_micrometeoroid_puncture, inject_solar_flare
 from paladin_sim.engine.grid import build_sample_topology
 from paladin_sim.sim_loop import SimulationState
+
+PROTOCOL_SCHEMA_PATH = Path(__file__).resolve().parents[3] / "docs" / "schemas" / "agent-protocol.schema.json"
+
+
+def _payload_validator(def_name: str) -> jsonschema.Draft202012Validator:
+    schema = json.loads(PROTOCOL_SCHEMA_PATH.read_text())
+    payload_schema = {**schema["$defs"][def_name], "$schema": schema["$schema"]}
+    return jsonschema.Draft202012Validator(payload_schema)
 
 
 def test_orion_commits_a_fix_for_a_cooling_breach() -> None:
@@ -14,6 +27,7 @@ def test_orion_commits_a_fix_for_a_cooling_breach() -> None:
 
     assert message["type"] == "commit"
     assert state.graph.nodes["SRV-01"]["metrics"]["powerLoadPercent"] != baseline_srv01_load
+    _payload_validator("commitPayload").validate(message["payload"])
 
 
 def test_orion_rolls_back_when_nothing_is_diagnosable() -> None:
@@ -25,6 +39,7 @@ def test_orion_rolls_back_when_nothing_is_diagnosable() -> None:
 
     assert message["type"] == "rollback"
     assert message["payload"]["reason"]
+    _payload_validator("rollbackPayload").validate(message["payload"])
 
 
 def test_orion_reroutes_around_a_severed_network_link() -> None:
