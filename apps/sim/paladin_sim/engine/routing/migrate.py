@@ -12,6 +12,7 @@ def find_migration_target(
     source_server_id: str,
     workload_load: float,
     dependency_ids: list[str] | None = None,
+    excluded_target_ids: set[str] | None = None,
 ) -> str | None:
     """Greedy best-fit: the server with the least spare capacity that still
     fits the workload and keeps every dependency live-reachable.
@@ -19,13 +20,18 @@ def find_migration_target(
     Best-fit means the tightest sufficient fit, not the roomiest one, that's
     what the term means in bin packing, and it avoids piling every migration
     onto whichever server happens to be emptiest. None if nothing qualifies.
+
+    excluded_target_ids lets a caller rule out a candidate already tried and
+    rejected (by ATHENA, say), without re-deriving the whole candidate set
+    itself.
     """
     dependency_ids = dependency_ids or []
+    excluded_target_ids = excluded_target_ids or set()
     network_graph = live_network_graph(graph)
 
     candidates: list[tuple[float, str]] = []
     for node_id, data in graph.nodes(data=True):
-        if data["type"] != "server" or node_id == source_server_id:
+        if data["type"] != "server" or node_id == source_server_id or node_id in excluded_target_ids:
             continue
 
         projected_load = data["metrics"]["powerLoadPercent"] + workload_load
