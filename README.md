@@ -4,9 +4,9 @@
 
 ### An orbital edge-compute facility under fire, five agents keeping it alive
 
-**Project PALADIN is an interactive 2D portfolio application simulating PALADIN-Station, an orbital edge-compute facility. When a solar flare, a micrometeoroid puncture, or a cooling breach strikes, five autonomous engineering agents diagnose and fix it live, on a retro sci-fi tactical console, with every fix formally checked before it's applied.**
+**Project PALADIN is an interactive 2D application simulating PALADIN-Station, an orbital edge-compute facility. When a solar flare, a micrometeoroid puncture, or a cooling breach strikes, five autonomous engineering agents diagnose and fix it live, on a retro sci-fi tactical console, with every fix formally checked before it's applied.**
 
-[![Status](https://img.shields.io/badge/status-architecture-blue?style=flat-square)]()
+[![Status](https://img.shields.io/badge/status-in%20development-blue?style=flat-square)]()
 [![Licence](https://img.shields.io/badge/licence-TBD-lightgrey?style=flat-square)]()
 
 </div>

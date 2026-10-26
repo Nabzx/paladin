@@ -4,14 +4,14 @@ The domain model and core vocabulary for this project.
 
 ## What this project is
 
-Project PALADIN is a high-fidelity, interactive 2D portfolio application simulating an orbital edge-compute facility, PALADIN-Station. The station encounters physical anomalies (solar flares, micrometeoroid punctures, cooling containment breaches), and a squad of five autonomous engineering agents detects, diagnoses, and resolves each fault under formal safety constraints.
+Project PALADIN is a high-fidelity, interactive 2D application simulating an orbital edge-compute facility, PALADIN-Station. The station encounters physical anomalies (solar flares, micrometeoroid punctures, cooling containment breaches), and a squad of five autonomous engineering agents detects, diagnoses, and resolves each fault under formal safety constraints.
 
 The application has two faces:
 
 - **The Tactical Console** — a zoomable, pannable 2D telemetry grid showing power buses, servers, and thermal vectors, rendered in a retro sci-fi space strategy style.
 - **The Operations Deck** — a streaming panel tracking the five agents as they manage an emergency in real time.
 
-The project exists to demonstrate systems-engineering and formal-verification capability for a postgraduate computer science student targeting a technical role at an elite data centre AI infrastructure company.
+This is a long-running personal project, built for its own sake and out of genuine interest in distributed systems, multi-agent orchestration, and formal verification, not a one-off exercise tied to any particular application or deadline.
 
 ## The five-agent squad
 
