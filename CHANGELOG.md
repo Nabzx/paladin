@@ -19,6 +19,10 @@ All notable changes to this project are documented here. Format follows [Keep a 
 - Faults can now target a specific edge (`affectedEdgeIds`), not only nodes, found while grilling ADR-0004 against a concrete scenario.
 - ADR-0004's no-secondary-cascade check now also requires the originally-faulted node to actually improve, not just that nothing new breaks.
 
+- Phase 2 complete: the engine runs end to end, headless. Station graph, physics, routing, fault injection, the tick and one-tick-forward projection, ATHENA's four-constraint checker, the five-agent squad, and real websocket streaming.
+- Fixed along the way, not planned: a shared-link contention bug, a thermal zone with no cooling path, a cascade-check bar that wrongly rejected every reroute fix, and a schema ambiguity between two structurally identical payload shapes.
+
 ### Planned
 
-- Phase 2: the real simulation tick, physics, routing, fault injection, agents, and ATHENA's checker, built headless against the Phase 1 ADRs.
+- Phase 3: wiring `apps/web` to live data, the Tactical Console, the Operations Deck.
+- A parallel backlog (#30-#49) deepening ATHENA with Z3 and topological formal verification.
