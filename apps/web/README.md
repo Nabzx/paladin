@@ -10,4 +10,4 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The page reports whether it can reach `apps/sim`'s `/health` endpoint.
+Open [http://localhost:3000](http://localhost:3000) with `apps/sim` already running. The page connects to `apps/sim`'s `/ws`, shows connection status, the current tick, node/edge counts, and the last agent-protocol message received.
