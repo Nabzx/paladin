@@ -30,18 +30,40 @@
       ]
     },
     "payload": {
-      "description": "Shape depends on type. See the $defs below.",
-      "oneOf": [
-        { "$ref": "#/$defs/statusBroadcastPayload" },
-        { "$ref": "#/$defs/faultAlertPayload" },
-        { "$ref": "#/$defs/fixProposalPayload" },
-        { "$ref": "#/$defs/validationRequestPayload" },
-        { "$ref": "#/$defs/validationResultPayload" },
-        { "$ref": "#/$defs/commitPayload" },
-        { "$ref": "#/$defs/rollbackPayload" }
-      ]
+      "description": "Shape depends on the sibling type field, see the allOf conditionals below and the $defs they reference.",
+      "type": "object"
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "status_broadcast" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/statusBroadcastPayload" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "fault_alert" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/faultAlertPayload" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "fix_proposal" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/fixProposalPayload" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "validation_request" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/validationRequestPayload" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "validation_result" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/validationResultPayload" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "commit" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/commitPayload" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "rollback" } } },
+      "then": { "properties": { "payload": { "$ref": "#/$defs/rollbackPayload" } } }
+    }
+  ],
   "$defs": {
     "agentId": {
       "type": "string",
