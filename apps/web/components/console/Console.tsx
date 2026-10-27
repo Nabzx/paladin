@@ -5,6 +5,7 @@ import { Application } from "@pixi/react";
 import type { Application as PixiApplication } from "pixi.js";
 import { Graphics, Text, TextStyle } from "pixi.js";
 import { Viewport } from "pixi-viewport";
+import { GlowFilter } from "pixi-filters";
 import type { EdgeStatus, NodeStatus, NodeType, TelemetrySnapshot } from "@/lib/schemas/telemetry";
 
 const NODE_COLOR: Record<NodeType, number> = {
@@ -16,12 +17,16 @@ const NODE_COLOR: Record<NodeType, number> = {
   radiator: 0x7fd4ff,
 };
 
-// Overrides NODE_COLOR when present. Basic alarm colour only, the full
-// glow/flicker treatment is #50/#53's job, not this component's.
+// Overrides NODE_COLOR when present, also drives the alarm glow's colour.
 const STATUS_TINT: Partial<Record<NodeStatus, number>> = {
   critical: 0xff3344,
   degraded: 0xffaa33,
 };
+
+const ALARM_STATUSES = new Set<NodeStatus>(["degraded", "critical"]);
+const GLOW_PULSE_MIN = 1.5;
+const GLOW_PULSE_MAX = 4.5;
+const GLOW_PULSE_PERIOD_MS = 900;
 
 const EDGE_COLOR: Record<EdgeStatus, number> = {
   nominal: 0x1a4d3a,
@@ -33,6 +38,7 @@ interface SceneRefs {
   viewport: Viewport;
   nodeGraphics: Map<string, Graphics>;
   edgeGraphics: Map<string, Graphics>;
+  glowFilters: Map<string, GlowFilter>;
 }
 
 function buildScene(app: PixiApplication): SceneRefs {
@@ -47,14 +53,27 @@ function buildScene(app: PixiApplication): SceneRefs {
   viewport.drag().pinch().wheel().decelerate();
   viewport.moveCenter(500, 300);
 
-  return { viewport, nodeGraphics: new Map(), edgeGraphics: new Map() };
+  const scene: SceneRefs = { viewport, nodeGraphics: new Map(), edgeGraphics: new Map(), glowFilters: new Map() };
+
+  // One shared phase drives every active glow in lockstep, cheap
+  // regardless of how many nodes are currently alarmed.
+  app.ticker.add(() => {
+    if (scene.glowFilters.size === 0) return;
+    const phase = (performance.now() % GLOW_PULSE_PERIOD_MS) / GLOW_PULSE_PERIOD_MS;
+    const strength = GLOW_PULSE_MIN + ((Math.sin(phase * Math.PI * 2) + 1) / 2) * (GLOW_PULSE_MAX - GLOW_PULSE_MIN);
+    for (const filter of scene.glowFilters.values()) {
+      filter.outerStrength = strength;
+    }
+  });
+
+  return scene;
 }
 
 // Updates the persistent scene in place, never rebuilds the viewport, the
 // backend streams a new snapshot every tick, rebuilding would reset the
 // user's pan and zoom position every couple of seconds.
 function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
-  const { viewport, nodeGraphics, edgeGraphics } = scene;
+  const { viewport, nodeGraphics, edgeGraphics, glowFilters } = scene;
   const seenNodeIds = new Set<string>();
   const seenEdgeIds = new Set<string>();
 
@@ -100,12 +119,26 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
     graphic.clear();
     graphic.circle(0, 0, 18).fill(color);
     graphic.circle(0, 0, 26).stroke({ width: 2, color, alpha: 0.35 });
+
+    if (ALARM_STATUSES.has(node.status)) {
+      let glow = glowFilters.get(node.id);
+      if (!glow) {
+        glow = new GlowFilter({ distance: 14, outerStrength: GLOW_PULSE_MIN });
+        glowFilters.set(node.id, glow);
+        graphic.filters = [glow];
+      }
+      glow.color = STATUS_TINT[node.status]!;
+    } else if (glowFilters.has(node.id)) {
+      glowFilters.delete(node.id);
+      graphic.filters = [];
+    }
   }
 
   for (const [id, graphic] of nodeGraphics) {
     if (!seenNodeIds.has(id)) {
       graphic.destroy();
       nodeGraphics.delete(id);
+      glowFilters.delete(id);
     }
   }
   for (const [id, graphic] of edgeGraphics) {
