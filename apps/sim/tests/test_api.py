@@ -62,3 +62,14 @@ def test_triggering_a_fault_appears_in_the_next_snapshots_active_faults() -> Non
     assert snapshot is not None
     active_fault_ids = [fault["id"] for fault in snapshot["activeFaults"]]
     assert fault_id in active_fault_ids
+
+
+def test_fault_severity_can_be_overridden_in_the_request() -> None:
+    with TestClient(app) as client:
+        response = client.post(
+            "/faults",
+            json={"type": "solar_flare", "node_id": "SRV-01", "severity": "p1"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["fault"]["severity"] == "p1"
