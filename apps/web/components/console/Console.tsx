@@ -6,7 +6,7 @@ import type { Application as PixiApplication } from "pixi.js";
 import { Graphics, Text, TextStyle } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import { GlowFilter } from "pixi-filters";
-import type { EdgeStatus, NodeStatus, NodeType, TelemetrySnapshot } from "@/lib/schemas/telemetry";
+import type { EdgeStatus, NodeStatus, NodeType, Severity, TelemetrySnapshot } from "@/lib/schemas/telemetry";
 
 const NODE_COLOR: Record<NodeType, number> = {
   server: 0x39ff88,
@@ -24,6 +24,24 @@ const STATUS_TINT: Partial<Record<NodeStatus, number>> = {
 };
 
 const ALARM_STATUSES = new Set<NodeStatus>(["degraded", "critical"]);
+
+// Lifted directly from the p1/p2/p3 GitHub label colours, so the console's
+// severity language matches the project's own issue-tracking severity
+// language.
+const SEVERITY_COLOR: Record<Severity, number> = {
+  p1: 0xb60205,
+  p2: 0xd93f0b,
+  p3: 0xfbca04,
+};
+
+// Most recent matching fault wins, a node can be hit more than once.
+function glowColorForNode(nodeId: string, status: NodeStatus, activeFaults: TelemetrySnapshot["activeFaults"]): number {
+  const faults = activeFaults ?? [];
+  for (let i = faults.length - 1; i >= 0; i -= 1) {
+    if (faults[i].affectedNodeIds.includes(nodeId)) return SEVERITY_COLOR[faults[i].severity];
+  }
+  return STATUS_TINT[status] ?? SEVERITY_COLOR.p3;
+}
 const GLOW_PULSE_MIN = 1.5;
 const GLOW_PULSE_MAX = 4.5;
 const GLOW_PULSE_PERIOD_MS = 900;
@@ -127,7 +145,7 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
         glowFilters.set(node.id, glow);
         graphic.filters = [glow];
       }
-      glow.color = STATUS_TINT[node.status]!;
+      glow.color = glowColorForNode(node.id, node.status, snapshot.activeFaults);
     } else if (glowFilters.has(node.id)) {
       glowFilters.delete(node.id);
       graphic.filters = [];
