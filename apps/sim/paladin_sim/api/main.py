@@ -53,21 +53,27 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+Severity = Literal["p1", "p2", "p3"]
+
+
 class CoolingBreachRequest(BaseModel):
     type: Literal["cooling_breach"]
     from_id: str
     to_id: str
+    severity: Severity = "p2"
 
 
 class MicrometeoroidPunctureRequest(BaseModel):
     type: Literal["micrometeoroid_puncture"]
     from_id: str
     to_id: str
+    severity: Severity = "p2"
 
 
 class SolarFlareRequest(BaseModel):
     type: Literal["solar_flare"]
     node_id: str
+    severity: Severity = "p2"
 
 
 FaultRequest = Annotated[
@@ -85,11 +91,15 @@ async def trigger_fault(request: FaultRequest) -> dict:
 
     try:
         if request.type == "cooling_breach":
-            fault = inject_cooling_breach(state.graph, fault_id, request.from_id, request.to_id)
+            fault = inject_cooling_breach(
+                state.graph, fault_id, request.from_id, request.to_id, severity=request.severity
+            )
         elif request.type == "micrometeoroid_puncture":
-            fault = inject_micrometeoroid_puncture(state.graph, fault_id, request.from_id, request.to_id)
+            fault = inject_micrometeoroid_puncture(
+                state.graph, fault_id, request.from_id, request.to_id, severity=request.severity
+            )
         else:
-            fault = inject_solar_flare(state.graph, fault_id, request.node_id)
+            fault = inject_solar_flare(state.graph, fault_id, request.node_id, severity=request.severity)
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
