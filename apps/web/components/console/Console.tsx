@@ -52,11 +52,52 @@ const EDGE_COLOR: Record<EdgeStatus, number> = {
   severed: 0xaa1122,
 };
 
+// currentFlow is static (set once at topology build, #11), not a live
+// per-tick value, so speed is a relative scale against a typical edge's
+// flow, not a calibrated physical unit.
+const DASH_LENGTH = 8;
+const DASH_GAP = 6;
+const DASH_SPEED_PX_PER_MS_PER_FLOW_UNIT = 0.0015;
+
+interface PowerFlow {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  color: number;
+  speed: number;
+  phase: number;
+}
+
 interface SceneRefs {
   viewport: Viewport;
   nodeGraphics: Map<string, Graphics>;
   edgeGraphics: Map<string, Graphics>;
   glowFilters: Map<string, GlowFilter>;
+  powerLineFlow: Map<string, PowerFlow>;
+}
+
+function drawDashedLine(graphic: Graphics, flow: PowerFlow): void {
+  graphic.clear();
+  const dx = flow.toX - flow.fromX;
+  const dy = flow.toY - flow.fromY;
+  const totalLength = Math.sqrt(dx * dx + dy * dy);
+  if (totalLength === 0) return;
+  const ux = dx / totalLength;
+  const uy = dy / totalLength;
+  const cycle = DASH_LENGTH + DASH_GAP;
+
+  let distance = -(flow.phase % cycle);
+  while (distance < totalLength) {
+    const segmentStart = Math.max(distance, 0);
+    const segmentEnd = Math.min(distance + DASH_LENGTH, totalLength);
+    if (segmentEnd > segmentStart) {
+      graphic.moveTo(flow.fromX + ux * segmentStart, flow.fromY + uy * segmentStart);
+      graphic.lineTo(flow.fromX + ux * segmentEnd, flow.fromY + uy * segmentEnd);
+    }
+    distance += cycle;
+  }
+  graphic.stroke({ width: 2, color: flow.color });
 }
 
 function buildScene(app: PixiApplication): SceneRefs {
@@ -71,16 +112,32 @@ function buildScene(app: PixiApplication): SceneRefs {
   viewport.drag().pinch().wheel().decelerate();
   viewport.moveCenter(500, 300);
 
-  const scene: SceneRefs = { viewport, nodeGraphics: new Map(), edgeGraphics: new Map(), glowFilters: new Map() };
+  const scene: SceneRefs = {
+    viewport,
+    nodeGraphics: new Map(),
+    edgeGraphics: new Map(),
+    glowFilters: new Map(),
+    powerLineFlow: new Map(),
+  };
 
-  // One shared phase drives every active glow in lockstep, cheap
-  // regardless of how many nodes are currently alarmed.
-  app.ticker.add(() => {
-    if (scene.glowFilters.size === 0) return;
-    const phase = (performance.now() % GLOW_PULSE_PERIOD_MS) / GLOW_PULSE_PERIOD_MS;
-    const strength = GLOW_PULSE_MIN + ((Math.sin(phase * Math.PI * 2) + 1) / 2) * (GLOW_PULSE_MAX - GLOW_PULSE_MIN);
-    for (const filter of scene.glowFilters.values()) {
-      filter.outerStrength = strength;
+  app.ticker.add((ticker) => {
+    // One shared phase drives every active glow in lockstep, cheap
+    // regardless of how many nodes are currently alarmed.
+    if (scene.glowFilters.size > 0) {
+      const phase = (performance.now() % GLOW_PULSE_PERIOD_MS) / GLOW_PULSE_PERIOD_MS;
+      const strength = GLOW_PULSE_MIN + ((Math.sin(phase * Math.PI * 2) + 1) / 2) * (GLOW_PULSE_MAX - GLOW_PULSE_MIN);
+      for (const filter of scene.glowFilters.values()) {
+        filter.outerStrength = strength;
+      }
+    }
+
+    // Only the dashed power_line edges redraw per frame, the rest of the
+    // scene stays untouched, keeping this cheap regardless of frame rate.
+    for (const [edgeId, flow] of scene.powerLineFlow) {
+      const graphic = scene.edgeGraphics.get(edgeId);
+      if (!graphic) continue;
+      flow.phase += flow.speed * ticker.deltaMS;
+      drawDashedLine(graphic, flow);
     }
   });
 
@@ -91,7 +148,7 @@ function buildScene(app: PixiApplication): SceneRefs {
 // backend streams a new snapshot every tick, rebuilding would reset the
 // user's pan and zoom position every couple of seconds.
 function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
-  const { viewport, nodeGraphics, edgeGraphics, glowFilters } = scene;
+  const { viewport, nodeGraphics, edgeGraphics, glowFilters, powerLineFlow } = scene;
   const seenNodeIds = new Set<string>();
   const seenEdgeIds = new Set<string>();
 
@@ -106,8 +163,30 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
 
     const from = snapshot.nodes.find((node) => node.id === edge.from);
     const to = snapshot.nodes.find((node) => node.id === edge.to);
-    graphic.clear();
-    if (from && to) {
+    if (!from || !to) {
+      graphic.clear();
+      continue;
+    }
+
+    // An animated flow for a severed power_line would show current still
+    // moving through a line that physically can't carry any, so severed
+    // edges fall back to the static stroke regardless of type.
+    const animated = edge.type === "power_line" && edge.status !== "severed";
+    if (animated) {
+      const existing = powerLineFlow.get(edge.id);
+      const speed = (edge.currentFlow ?? 0) * DASH_SPEED_PX_PER_MS_PER_FLOW_UNIT;
+      powerLineFlow.set(edge.id, {
+        fromX: from.position.x,
+        fromY: from.position.y,
+        toX: to.position.x,
+        toY: to.position.y,
+        color: EDGE_COLOR[edge.status],
+        speed,
+        phase: existing?.phase ?? 0,
+      });
+    } else {
+      powerLineFlow.delete(edge.id);
+      graphic.clear();
       graphic.moveTo(from.position.x, from.position.y).lineTo(to.position.x, to.position.y);
       graphic.stroke({ width: 2, color: EDGE_COLOR[edge.status] });
     }
@@ -163,6 +242,7 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
     if (!seenEdgeIds.has(id)) {
       graphic.destroy();
       edgeGraphics.delete(id);
+      powerLineFlow.delete(id);
     }
   }
 }
