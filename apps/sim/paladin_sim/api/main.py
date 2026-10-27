@@ -93,6 +93,8 @@ async def trigger_fault(request: FaultRequest) -> dict:
     except (KeyError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
+    state.active_faults.append(fault)
+
     await connections.broadcast(make_message("orion", "fault_alert", fault_to_alert_payload(fault)))
 
     result = orion.respond_to_fault(state, fault)
