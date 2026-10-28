@@ -6,7 +6,7 @@ import type { Application as PixiApplication } from "pixi.js";
 import { Graphics, Text, TextStyle } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import { CRTFilter, GlowFilter } from "pixi-filters";
-import type { EdgeStatus, EdgeType, NodeStatus, NodeType, Severity, TelemetrySnapshot } from "@/lib/schemas/telemetry";
+import type { EdgeStatus, EdgeType, Fault, NodeStatus, NodeType, Severity, TelemetrySnapshot } from "@/lib/schemas/telemetry";
 
 const NODE_COLOR: Record<NodeType, number> = {
   server: 0x39ff88,
@@ -69,6 +69,21 @@ const FLICKER_DURATION_MS = 260;
 const FLICKER_FLASHES = 5;
 const FLICKER_MAX_ALPHA = 0.55;
 
+// A deliberate glide, not a snap, same reasoning as every other dramatised
+// timing in this console: the physical event is instantaneous, the visual
+// cue needs its own duration to actually be perceived.
+const CAMERA_FOCUS_TIME_MS = 700;
+const CAMERA_FOCUS_EASE = "easeInOutSine";
+// A single affected node has no bounding box to fit, this is how close in
+// to sit on it. Two or more nodes compute their own scale from how far
+// apart they are, clamped between these so a pair of adjacent nodes
+// doesn't over-zoom and a pair on opposite ends of the graph doesn't
+// zoom out past comfortable framing.
+const SINGLE_NODE_FOCUS_SCALE = 1.8;
+const MIN_FOCUS_SCALE = 0.9;
+const MAX_FOCUS_SCALE = 1.8;
+const FOCUS_PADDING_PX = 220;
+
 // Status overrides EDGE_TYPE_COLOR's nominal-case colour, something wrong
 // matters more than what kind of line it is.
 const EDGE_COLOR: Partial<Record<EdgeStatus, number>> = {
@@ -109,6 +124,7 @@ interface EdgeFlow {
 }
 
 interface SceneRefs {
+  app: PixiApplication;
   viewport: Viewport;
   nodeGraphics: Map<string, Graphics>;
   edgeGraphics: Map<string, Graphics>;
@@ -148,6 +164,42 @@ function drawDashedLine(graphic: Graphics, flow: EdgeFlow): void {
   graphic.stroke({ width: 2, color: flow.color });
 }
 
+// Centres and zooms the camera on a fault's affected node(s). A single
+// node has no bounding box to fit, so it just sits at a fixed comfortable
+// zoom; two or more compute their own scale from how far apart they are,
+// clamped so neither an adjacent pair nor a pair on opposite ends of the
+// graph produces an uncomfortable zoom level.
+function focusOnFault(scene: SceneRefs, fault: Fault, snapshot: TelemetrySnapshot): void {
+  const positions = fault.affectedNodeIds
+    .map((id) => snapshot.nodes.find((node) => node.id === id)?.position)
+    .filter((position): position is { x: number; y: number } => position !== undefined);
+  if (positions.length === 0) return;
+
+  const minX = Math.min(...positions.map((p) => p.x));
+  const maxX = Math.max(...positions.map((p) => p.x));
+  const minY = Math.min(...positions.map((p) => p.y));
+  const maxY = Math.max(...positions.map((p) => p.y));
+  const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+
+  const bboxWidth = maxX - minX;
+  const bboxHeight = maxY - minY;
+  const scale =
+    bboxWidth === 0 && bboxHeight === 0
+      ? SINGLE_NODE_FOCUS_SCALE
+      : Math.max(
+          MIN_FOCUS_SCALE,
+          Math.min(
+            MAX_FOCUS_SCALE,
+            Math.min(
+              scene.app.renderer.width / (bboxWidth + FOCUS_PADDING_PX),
+              scene.app.renderer.height / (bboxHeight + FOCUS_PADDING_PX),
+            ),
+          ),
+        );
+
+  scene.viewport.animate({ position: center, scale, time: CAMERA_FOCUS_TIME_MS, ease: CAMERA_FOCUS_EASE });
+}
+
 function buildScene(app: PixiApplication): SceneRefs {
   const viewport = new Viewport({
     screenWidth: app.renderer.width,
@@ -175,6 +227,7 @@ function buildScene(app: PixiApplication): SceneRefs {
   app.stage.addChild(flickerOverlay);
 
   const scene: SceneRefs = {
+    app,
     viewport,
     nodeGraphics: new Map(),
     edgeGraphics: new Map(),
@@ -243,7 +296,10 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
   for (const fault of snapshot.activeFaults ?? []) {
     if (scene.knownFaultIds.has(fault.id)) continue;
     scene.knownFaultIds.add(fault.id);
-    if (scene.hasSyncedOnce) scene.flickerStartMs = performance.now();
+    if (scene.hasSyncedOnce) {
+      scene.flickerStartMs = performance.now();
+      focusOnFault(scene, fault, snapshot);
+    }
   }
   scene.hasSyncedOnce = true;
 
