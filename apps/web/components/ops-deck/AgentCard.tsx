@@ -1,11 +1,14 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useMessageHold } from "./useMessageHold";
 
 const ACTIVE_HOLD_MS = 1800;
 
 export interface AgentCardProps {
-  callsign: string;
+  /** A small SVG glyph, see avatars.tsx, rendered inside the bordered
+   *  slot that used to hold an empty placeholder (#60). */
+  icon: ReactNode;
   name: string;
   role: string;
   task: string;
@@ -24,10 +27,8 @@ export interface AgentCardProps {
 }
 
 // A crew-manifest row, not a tall profile card: five of these need to sit
-// beside the console without competing with it. The bordered square is an
-// empty ID-photo slot, not a finished avatar, portrait art is #60's job,
-// this only reserves its place.
-export function AgentCard({ callsign, name, role, task, accent, latestMessageId, pulseOverride }: AgentCardProps) {
+// beside the console without competing with it.
+export function AgentCard({ icon, name, role, task, accent, latestMessageId, pulseOverride }: AgentCardProps) {
   const active = useMessageHold(latestMessageId, ACTIVE_HOLD_MS);
 
   const pulsing = pulseOverride !== undefined;
@@ -40,10 +41,10 @@ export function AgentCard({ callsign, name, role, task, accent, latestMessageId,
       style={{ borderColor }}
     >
       <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center border text-[10px] font-bold tracking-wider transition-colors duration-500 ${pulsing ? "animate-pulse" : ""}`}
+        className={`flex h-10 w-10 shrink-0 items-center justify-center border transition-colors duration-500 ${pulsing ? "animate-pulse" : ""}`}
         style={{ borderColor: lit ? borderColor : "#3a3f3f", color: lit ? borderColor : "#5a6060" }}
       >
-        {callsign}
+        {icon}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">

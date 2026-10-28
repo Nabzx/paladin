@@ -2,6 +2,7 @@
 
 import type { AgentId, AgentMessage, MessageType } from "@/lib/schemas/agent-protocol";
 import { AgentCard } from "./AgentCard";
+import { Avatar } from "./avatars";
 import { useMessageHold } from "./useMessageHold";
 
 // Shorter than AgentCard's general ACTIVE_HOLD_MS, this one isn't filling
@@ -32,12 +33,12 @@ const ATHENA_CHECKING = "#eaf6ff";
 // MERCURY's problem to react to, not a new failure vocabulary of its own.
 const MERCURY_REJECTED = ATHENA_FAIL;
 
-const AGENTS: { id: AgentId; callsign: string; name: string; role: string; accent: string }[] = [
-  { id: "orion", callsign: "ORI", name: "ORION", role: "Command Orchestrator", accent: "#39ff88" },
-  { id: "vulcan", callsign: "VUL", name: "VULCAN", role: "Thermal & Fluids", accent: "#33d6ff" },
-  { id: "tesla", callsign: "TES", name: "TESLA", role: "Electrical Grid", accent: "#ffcc00" },
-  { id: "mercury", callsign: "MER", name: "MERCURY", role: "Workload & Routing", accent: "#9d6bff" },
-  { id: "athena", callsign: "ATH", name: "ATHENA", role: "Verification Gate", accent: ATHENA_IDLE },
+const AGENTS: { id: AgentId; name: string; role: string; accent: string }[] = [
+  { id: "orion", name: "ORION", role: "Command Orchestrator", accent: "#39ff88" },
+  { id: "vulcan", name: "VULCAN", role: "Thermal & Fluids", accent: "#33d6ff" },
+  { id: "tesla", name: "TESLA", role: "Electrical Grid", accent: "#ffcc00" },
+  { id: "mercury", name: "MERCURY", role: "Workload & Routing", accent: "#9d6bff" },
+  { id: "athena", name: "ATHENA", role: "Verification Gate", accent: ATHENA_IDLE },
 ];
 
 function lastFrom(messages: AgentMessage[], agentId: AgentId): AgentMessage | undefined {
@@ -102,7 +103,7 @@ export function OpsDeck({ messages }: OpsDeckProps) {
         return (
           <AgentCard
             key={agent.id}
-            callsign={agent.callsign}
+            icon={<Avatar agentId={agent.id} />}
             name={agent.name}
             role={agent.role}
             task={task}
