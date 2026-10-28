@@ -234,6 +234,12 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
   const seenNodeIds = new Set<string>();
   const seenEdgeIds = new Set<string>();
 
+  for (const fault of snapshot.activeFaults ?? []) {
+    if (scene.knownFaultIds.has(fault.id)) continue;
+    scene.knownFaultIds.add(fault.id);
+    scene.flickerStartMs = performance.now();
+  }
+
   for (const edge of snapshot.edges) {
     seenEdgeIds.add(edge.id);
     let graphic = edgeGraphics.get(edge.id);
