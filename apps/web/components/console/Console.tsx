@@ -117,6 +117,7 @@ interface SceneRefs {
   flickerOverlay: Graphics;
   flickerStartMs: number | null;
   knownFaultIds: Set<string>;
+  hasSyncedOnce: boolean;
 }
 
 function drawDashedLine(graphic: Graphics, flow: EdgeFlow): void {
@@ -182,6 +183,7 @@ function buildScene(app: PixiApplication): SceneRefs {
     flickerOverlay,
     flickerStartMs: null,
     knownFaultIds: new Set(),
+    hasSyncedOnce: false,
   };
 
   app.ticker.add((ticker) => {
@@ -234,11 +236,16 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
   const seenNodeIds = new Set<string>();
   const seenEdgeIds = new Set<string>();
 
+  // The very first sync after connecting (or reconnecting mid-incident)
+  // seeds knownFaultIds without flickering, a fault that was already
+  // active before this client ever connected isn't "just injected", only
+  // faults that appear after that baseline should burst.
   for (const fault of snapshot.activeFaults ?? []) {
     if (scene.knownFaultIds.has(fault.id)) continue;
     scene.knownFaultIds.add(fault.id);
-    scene.flickerStartMs = performance.now();
+    if (scene.hasSyncedOnce) scene.flickerStartMs = performance.now();
   }
+  scene.hasSyncedOnce = true;
 
   for (const edge of snapshot.edges) {
     seenEdgeIds.add(edge.id);
