@@ -4,11 +4,6 @@ import { useMessageHold } from "./useMessageHold";
 
 const ACTIVE_HOLD_MS = 1800;
 
-// Neither an identity colour nor a verdict colour, a near-white "system
-// working" tone that can't be mistaken for any agent's accent or for
-// ATHENA's own pass/fail green and red.
-const CHECKING_COLOR = "#eaf6ff";
-
 export interface AgentCardProps {
   callsign: string;
   name: string;
@@ -19,30 +14,34 @@ export interface AgentCardProps {
    *  A change re-triggers the active glow even if the task text (which
    *  only updates on a status_broadcast) stays the same. */
   latestMessageId: string | undefined;
-  /** True while this card should show the distinct "checking" pulse
-   *  instead of its normal active/idle rendering, ATHENA only, see #65. */
-  checking?: boolean;
+  /** When set, overrides the card's normal active/idle colour with a
+   *  pulsing version of this colour, for states that need their own
+   *  visual language beyond the generic active glow: ATHENA's checking
+   *  pulse (#65), MERCURY's rejected-fix flash (#66). The colour and its
+   *  hold duration are OpsDeck's decision, this component just renders
+   *  whatever it's told. */
+  pulseOverride?: string;
 }
 
 // A crew-manifest row, not a tall profile card: five of these need to sit
 // beside the console without competing with it. The bordered square is an
 // empty ID-photo slot, not a finished avatar, portrait art is #60's job,
 // this only reserves its place.
-export function AgentCard({ callsign, name, role, task, accent, latestMessageId, checking = false }: AgentCardProps) {
+export function AgentCard({ callsign, name, role, task, accent, latestMessageId, pulseOverride }: AgentCardProps) {
   const active = useMessageHold(latestMessageId, ACTIVE_HOLD_MS);
 
-  const borderColor = checking ? CHECKING_COLOR : active ? accent : "#2a2f2f";
-  const dotColor = checking ? CHECKING_COLOR : accent;
-  const dotLit = checking || active;
+  const pulsing = pulseOverride !== undefined;
+  const borderColor = pulseOverride ?? (active ? accent : "#2a2f2f");
+  const lit = pulsing || active;
 
   return (
     <div
-      className={`flex w-72 items-stretch gap-3 border bg-black/60 px-3 py-2 font-mono transition-colors duration-500 ${checking ? "animate-pulse" : ""}`}
+      className={`flex w-72 items-stretch gap-3 border bg-black/60 px-3 py-2 font-mono transition-colors duration-500 ${pulsing ? "animate-pulse" : ""}`}
       style={{ borderColor }}
     >
       <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center border text-[10px] font-bold tracking-wider transition-colors duration-500 ${checking ? "animate-pulse" : ""}`}
-        style={{ borderColor: dotLit ? borderColor : "#3a3f3f", color: dotLit ? borderColor : "#5a6060" }}
+        className={`flex h-10 w-10 shrink-0 items-center justify-center border text-[10px] font-bold tracking-wider transition-colors duration-500 ${pulsing ? "animate-pulse" : ""}`}
+        style={{ borderColor: lit ? borderColor : "#3a3f3f", color: lit ? borderColor : "#5a6060" }}
       >
         {callsign}
       </div>
@@ -50,11 +49,11 @@ export function AgentCard({ callsign, name, role, task, accent, latestMessageId,
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-bold tracking-[0.15em] text-zinc-200">{name}</span>
           <span
-            className={`h-1.5 w-1.5 shrink-0 rounded-full transition-all duration-500 ${checking ? "animate-pulse" : ""}`}
+            className={`h-1.5 w-1.5 shrink-0 rounded-full transition-all duration-500 ${pulsing ? "animate-pulse" : ""}`}
             style={{
-              backgroundColor: dotLit ? dotColor : "transparent",
-              border: dotLit ? "none" : "1px solid #5a6060",
-              boxShadow: dotLit ? `0 0 6px 1px ${dotColor}` : "none",
+              backgroundColor: lit ? borderColor : "transparent",
+              border: lit ? "none" : "1px solid #5a6060",
+              boxShadow: lit ? `0 0 6px 1px ${borderColor}` : "none",
             }}
           />
         </div>
