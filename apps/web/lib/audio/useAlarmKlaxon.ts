@@ -52,14 +52,16 @@ export interface AlarmKlaxonState {
 // connect), so unlike #57's flicker burst this needs no "already active on
 // first sync" guard, every fault_alert this hook ever sees is genuinely new.
 export function useAlarmKlaxon(messages: AgentMessage[]): AlarmKlaxonState {
-  const [muted, setMuted] = useState(false);
+  // A lazy initialiser, not a separate read effect: reading and writing in
+  // two different effects races on mount, the write effect can fire with
+  // the stale default before the read effect's setMuted has landed and
+  // overwrite the real stored value with it, found live testing a reload.
+  const [muted, setMuted] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(MUTE_STORAGE_KEY) === "true";
+  });
   const contextRef = useRef<AudioContext | null>(null);
   const lastMessageIdRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    const stored = window.localStorage.getItem(MUTE_STORAGE_KEY);
-    if (stored !== null) setMuted(stored === "true");
-  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(MUTE_STORAGE_KEY, String(muted));
