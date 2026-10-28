@@ -10,6 +10,10 @@ import { useMessageHold } from "./useMessageHold";
 // "in progress" rather than "stuck".
 const CHECKING_HOLD_MS = 1100;
 
+// Shorter again, a flash reads as a reaction to a single event, not a
+// held state, see #66.
+const REJECT_FLASH_HOLD_MS = 600;
+
 // Accents are drawn from Console.tsx's own existing colour vocabulary, not
 // a fresh palette invented for this panel, so the Operations Deck reads as
 // part of the same station rather than a bolted-on dashboard. ORION gets
@@ -21,6 +25,12 @@ const CHECKING_HOLD_MS = 1100;
 const ATHENA_IDLE = "#8fa3b3";
 const ATHENA_PASS = "#39ff88";
 const ATHENA_FAIL = "#ff3344";
+const ATHENA_CHECKING = "#eaf6ff";
+
+// Same red as ATHENA_FAIL and Console.tsx's critical-node colour, "red"
+// means the same thing everywhere in this app, a rejected proposal is
+// MERCURY's problem to react to, not a new failure vocabulary of its own.
+const MERCURY_REJECTED = ATHENA_FAIL;
 
 const AGENTS: { id: AgentId; callsign: string; name: string; role: string; accent: string }[] = [
   { id: "orion", callsign: "ORI", name: "ORION", role: "Command Orchestrator", accent: "#39ff88" },
@@ -44,12 +54,20 @@ function lastOfType(messages: AgentMessage[], agentId: AgentId, type: MessageTyp
   return undefined;
 }
 
+function lastFailedValidation(messages: AgentMessage[]): AgentMessage | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i];
+    if (msg.from === "athena" && msg.type === "validation_result" && msg.payload.verdict === "fail") return msg;
+  }
+  return undefined;
+}
+
 // ATHENA's card colour is the one bold move here: not a fixed identity
 // colour like the other four, it reflects her actual last verdict, green
 // for pass, red for fail, the same alarm-red already used for a critical
 // node in Console.tsx, so "red" means the same thing on both panels.
 function deriveAthenaAccent(messages: AgentMessage[]): string {
-  const lastVerdict = [...messages].reverse().find((msg) => msg.from === "athena" && msg.type === "validation_result");
+  const lastVerdict = lastOfType(messages, "athena", "validation_result");
   if (!lastVerdict) return ATHENA_IDLE;
   return lastVerdict.payload.verdict === "pass" ? ATHENA_PASS : ATHENA_FAIL;
 }
@@ -65,12 +83,21 @@ export function OpsDeck({ messages }: OpsDeckProps) {
   // validation step itself needs to read as a moment, not just the
   // eventual pass/fail colour that follows it.
   const athenaChecking = useMessageHold(lastOfType(messages, "athena", "validation_request")?.messageId, CHECKING_HOLD_MS);
+  // MERCURY is the only agent that proposes a fix today (see mercury.py),
+  // so any failing validation_result is necessarily one of her proposals,
+  // no need for a generic "which agent proposed this" lookup that nothing
+  // else in the system would ever exercise.
+  const mercuryRejected = useMessageHold(lastFailedValidation(messages)?.messageId, REJECT_FLASH_HOLD_MS);
 
   return (
     <div className="pointer-events-none absolute right-4 top-4 z-10 flex flex-col gap-2">
       {AGENTS.map((agent) => {
         const status = lastOfType(messages, agent.id, "status_broadcast");
         const task = typeof status?.payload.summary === "string" ? status.payload.summary : "standing by";
+
+        let pulseOverride: string | undefined;
+        if (agent.id === "athena" && athenaChecking) pulseOverride = ATHENA_CHECKING;
+        else if (agent.id === "mercury" && mercuryRejected) pulseOverride = MERCURY_REJECTED;
 
         return (
           <AgentCard
@@ -81,7 +108,7 @@ export function OpsDeck({ messages }: OpsDeckProps) {
             task={task}
             accent={agent.id === "athena" ? athenaAccent : agent.accent}
             latestMessageId={lastFrom(messages, agent.id)?.messageId}
-            checking={agent.id === "athena" ? athenaChecking : false}
+            pulseOverride={pulseOverride}
           />
         );
       })}
