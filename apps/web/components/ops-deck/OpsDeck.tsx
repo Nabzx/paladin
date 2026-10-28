@@ -1,7 +1,14 @@
 "use client";
 
-import type { AgentId, AgentMessage } from "@/lib/schemas/agent-protocol";
+import type { AgentId, AgentMessage, MessageType } from "@/lib/schemas/agent-protocol";
 import { AgentCard } from "./AgentCard";
+import { useMessageHold } from "./useMessageHold";
+
+// Shorter than AgentCard's general ACTIVE_HOLD_MS, this one isn't filling
+// the gap between messages that already arrive milliseconds apart, it's
+// standing in for ATHENA's actual checking time, a snappier hold reads as
+// "in progress" rather than "stuck".
+const CHECKING_HOLD_MS = 1100;
 
 // Accents are drawn from Console.tsx's own existing colour vocabulary, not
 // a fresh palette invented for this panel, so the Operations Deck reads as
@@ -30,9 +37,9 @@ function lastFrom(messages: AgentMessage[], agentId: AgentId): AgentMessage | un
   return undefined;
 }
 
-function lastStatusBroadcastFrom(messages: AgentMessage[], agentId: AgentId): AgentMessage | undefined {
+function lastOfType(messages: AgentMessage[], agentId: AgentId, type: MessageType): AgentMessage | undefined {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i].from === agentId && messages[i].type === "status_broadcast") return messages[i];
+    if (messages[i].from === agentId && messages[i].type === type) return messages[i];
   }
   return undefined;
 }
@@ -53,11 +60,16 @@ interface OpsDeckProps {
 
 export function OpsDeck({ messages }: OpsDeckProps) {
   const athenaAccent = deriveAthenaAccent(messages);
+  // Her own distinct "checking" pulse, separate from the generic
+  // active-on-any-message glow every other card uses, see #65: the
+  // validation step itself needs to read as a moment, not just the
+  // eventual pass/fail colour that follows it.
+  const athenaChecking = useMessageHold(lastOfType(messages, "athena", "validation_request")?.messageId, CHECKING_HOLD_MS);
 
   return (
     <div className="pointer-events-none absolute right-4 top-4 z-10 flex flex-col gap-2">
       {AGENTS.map((agent) => {
-        const status = lastStatusBroadcastFrom(messages, agent.id);
+        const status = lastOfType(messages, agent.id, "status_broadcast");
         const task = typeof status?.payload.summary === "string" ? status.payload.summary : "standing by";
 
         return (
@@ -69,6 +81,7 @@ export function OpsDeck({ messages }: OpsDeckProps) {
             task={task}
             accent={agent.id === "athena" ? athenaAccent : agent.accent}
             latestMessageId={lastFrom(messages, agent.id)?.messageId}
+            checking={agent.id === "athena" ? athenaChecking : false}
           />
         );
       })}
