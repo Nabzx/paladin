@@ -47,7 +47,7 @@ export default function Home() {
       <OpsDeck messages={messages} />
       <MissionLog messages={messages} />
       <CockpitHud snapshot={snapshot} />
-      <Console snapshot={snapshot} />
+      <Console snapshot={snapshot} messages={messages} />
     </main>
   );
 }

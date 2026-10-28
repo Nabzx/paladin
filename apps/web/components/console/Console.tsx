@@ -6,7 +6,8 @@ import type { Application as PixiApplication } from "pixi.js";
 import { Graphics, Text, TextStyle } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import { CRTFilter, GlowFilter } from "pixi-filters";
-import type { EdgeStatus, EdgeType, Fault, NodeStatus, NodeType, Severity, TelemetrySnapshot } from "@/lib/schemas/telemetry";
+import type { AgentMessage } from "@/lib/schemas/agent-protocol";
+import type { EdgeStatus, EdgeType, NodeStatus, NodeType, Severity, TelemetrySnapshot } from "@/lib/schemas/telemetry";
 
 const NODE_COLOR: Record<NodeType, number> = {
   server: 0x39ff88,
@@ -132,8 +133,10 @@ interface SceneRefs {
   edgeFlow: Map<string, EdgeFlow>;
   flickerOverlay: Graphics;
   flickerStartMs: number | null;
-  knownFaultIds: Set<string>;
-  hasSyncedOnce: boolean;
+  /** The most recently synced snapshot, read by triggerFaultEffects to
+   *  look up affected node positions, a fault_alert message (from
+   *  the agent-protocol stream, not this snapshot) is what triggers it. */
+  latestSnapshot: TelemetrySnapshot | null;
 }
 
 function drawDashedLine(graphic: Graphics, flow: EdgeFlow): void {
@@ -169,8 +172,8 @@ function drawDashedLine(graphic: Graphics, flow: EdgeFlow): void {
 // zoom; two or more compute their own scale from how far apart they are,
 // clamped so neither an adjacent pair nor a pair on opposite ends of the
 // graph produces an uncomfortable zoom level.
-function focusOnFault(scene: SceneRefs, fault: Fault, snapshot: TelemetrySnapshot): void {
-  const positions = fault.affectedNodeIds
+function focusOnNodes(scene: SceneRefs, affectedNodeIds: string[], snapshot: TelemetrySnapshot): void {
+  const positions = affectedNodeIds
     .map((id) => snapshot.nodes.find((node) => node.id === id)?.position)
     .filter((position): position is { x: number; y: number } => position !== undefined);
   if (positions.length === 0) return;
@@ -198,6 +201,17 @@ function focusOnFault(scene: SceneRefs, fault: Fault, snapshot: TelemetrySnapsho
         );
 
   scene.viewport.animate({ position: center, scale, time: CAMERA_FOCUS_TIME_MS, ease: CAMERA_FOCUS_EASE });
+}
+
+// Fires on a fault_alert agent-protocol message, not on the telemetry
+// snapshot: a fault that resolves within the same /faults request never
+// appears in any broadcast snapshot (#62 clears it from active_faults
+// before the one snapshot that request sends), but fault_alert is always
+// broadcast first, before any fix is even attempted, so it's the only
+// signal that fires reliably regardless of how quickly ORION resolves it.
+function triggerFaultEffects(scene: SceneRefs, affectedNodeIds: string[]): void {
+  scene.flickerStartMs = performance.now();
+  if (scene.latestSnapshot) focusOnNodes(scene, affectedNodeIds, scene.latestSnapshot);
 }
 
 function buildScene(app: PixiApplication): SceneRefs {
@@ -235,8 +249,7 @@ function buildScene(app: PixiApplication): SceneRefs {
     edgeFlow: new Map(),
     flickerOverlay,
     flickerStartMs: null,
-    knownFaultIds: new Set(),
-    hasSyncedOnce: false,
+    latestSnapshot: null,
   };
 
   app.ticker.add((ticker) => {
@@ -289,19 +302,7 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
   const seenNodeIds = new Set<string>();
   const seenEdgeIds = new Set<string>();
 
-  // The very first sync after connecting (or reconnecting mid-incident)
-  // seeds knownFaultIds without flickering, a fault that was already
-  // active before this client ever connected isn't "just injected", only
-  // faults that appear after that baseline should burst.
-  for (const fault of snapshot.activeFaults ?? []) {
-    if (scene.knownFaultIds.has(fault.id)) continue;
-    scene.knownFaultIds.add(fault.id);
-    if (scene.hasSyncedOnce) {
-      scene.flickerStartMs = performance.now();
-      focusOnFault(scene, fault, snapshot);
-    }
-  }
-  scene.hasSyncedOnce = true;
+  scene.latestSnapshot = snapshot;
 
   for (const edge of snapshot.edges) {
     seenEdgeIds.add(edge.id);
@@ -403,16 +404,33 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
 
 interface ConsoleProps {
   snapshot: TelemetrySnapshot | null;
+  messages: AgentMessage[];
 }
 
-export function Console({ snapshot }: ConsoleProps) {
+export function Console({ snapshot, messages }: ConsoleProps) {
   const sceneRef = useRef<SceneRefs | null>(null);
+  const lastMessageIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (sceneRef.current && snapshot) {
       syncScene(sceneRef.current, snapshot);
     }
   }, [snapshot]);
+
+  // fault_alert is never replayed to a reconnecting client (only the
+  // snapshot is, on connect), so unlike the old snapshot-diffing approach
+  // this needs no "already active on first sync" guard, every fault_alert
+  // this effect ever sees is genuinely new.
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const last = messages[messages.length - 1];
+    if (!scene || !last || last.messageId === lastMessageIdRef.current) return;
+    lastMessageIdRef.current = last.messageId;
+    if (last.type === "fault_alert") {
+      const affectedNodeIds = last.payload.affectedNodeIds;
+      if (Array.isArray(affectedNodeIds)) triggerFaultEffects(scene, affectedNodeIds as string[]);
+    }
+  }, [messages]);
 
   return (
     <Application
