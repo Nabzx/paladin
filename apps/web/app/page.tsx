@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { MissionLog } from "@/components/ops-deck/MissionLog";
 import { OpsDeck } from "@/components/ops-deck/OpsDeck";
 import { useStationSocket } from "@/lib/telemetry/useStationSocket";
 
@@ -37,6 +38,7 @@ export default function Home() {
         )}
       </div>
       <OpsDeck messages={messages} />
+      <MissionLog messages={messages} />
       <Console snapshot={snapshot} />
     </main>
   );
