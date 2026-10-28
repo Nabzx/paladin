@@ -6,7 +6,7 @@ import type { Application as PixiApplication } from "pixi.js";
 import { Graphics, Text, TextStyle } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 import { GlowFilter } from "pixi-filters";
-import type { EdgeStatus, NodeStatus, NodeType, Severity, TelemetrySnapshot } from "@/lib/schemas/telemetry";
+import type { EdgeStatus, EdgeType, NodeStatus, NodeType, Severity, TelemetrySnapshot } from "@/lib/schemas/telemetry";
 
 const NODE_COLOR: Record<NodeType, number> = {
   server: 0x39ff88,
@@ -46,20 +46,36 @@ const GLOW_PULSE_MIN = 1.5;
 const GLOW_PULSE_MAX = 4.5;
 const GLOW_PULSE_PERIOD_MS = 900;
 
-const EDGE_COLOR: Record<EdgeStatus, number> = {
-  nominal: 0x1a4d3a,
+// Status overrides EDGE_TYPE_COLOR's nominal-case colour, something wrong
+// matters more than what kind of line it is.
+const EDGE_COLOR: Partial<Record<EdgeStatus, number>> = {
   congested: 0xaa6600,
   severed: 0xaa1122,
 };
 
-// currentFlow is static (set once at topology build, #11), not a live
-// per-tick value, so speed is a relative scale against a typical edge's
-// flow, not a calibrated physical unit.
-const DASH_LENGTH = 8;
-const DASH_GAP = 6;
-const DASH_SPEED_PX_PER_MS_PER_FLOW_UNIT = 0.0015;
+// Distinct base colour per type for the nominal case, so the three kinds
+// are distinguishable at a glance without reading a legend.
+const EDGE_TYPE_COLOR: Record<EdgeType, number> = {
+  power_line: 0x1a4d3a,
+  coolant_line: 0x1a7a9a,
+  network_link: 0x6a3d9a,
+};
 
-interface PowerFlow {
+// A distinct dash pattern per type, same reasoning as the colour above.
+// currentFlow is static (set once at topology build, #11), not a live
+// per-tick value, so speedScale is a relative scale against a typical
+// edge's flow for that type, not a calibrated physical unit, the three
+// types have very different flow magnitudes in the sample topology
+// (power 5-40, coolant uniformly 5, network uniformly 100), one shared
+// scale would make network blur past and coolant look nearly static.
+const DASH_PATTERN: Record<EdgeType, { length: number; gap: number; speedScale: number }> = {
+  power_line: { length: 8, gap: 6, speedScale: 0.0015 },
+  coolant_line: { length: 3, gap: 4, speedScale: 0.006 },
+  network_link: { length: 14, gap: 5, speedScale: 0.0005 },
+};
+
+interface EdgeFlow {
+  type: EdgeType;
   fromX: number;
   fromY: number;
   toX: number;
@@ -74,10 +90,10 @@ interface SceneRefs {
   nodeGraphics: Map<string, Graphics>;
   edgeGraphics: Map<string, Graphics>;
   glowFilters: Map<string, GlowFilter>;
-  powerLineFlow: Map<string, PowerFlow>;
+  edgeFlow: Map<string, EdgeFlow>;
 }
 
-function drawDashedLine(graphic: Graphics, flow: PowerFlow): void {
+function drawDashedLine(graphic: Graphics, flow: EdgeFlow): void {
   graphic.clear();
   const dx = flow.toX - flow.fromX;
   const dy = flow.toY - flow.fromY;
@@ -85,12 +101,17 @@ function drawDashedLine(graphic: Graphics, flow: PowerFlow): void {
   if (totalLength === 0) return;
   const ux = dx / totalLength;
   const uy = dy / totalLength;
-  const cycle = DASH_LENGTH + DASH_GAP;
+  const { length: dashLength, gap: dashGap } = DASH_PATTERN[flow.type];
+  const cycle = dashLength + dashGap;
 
-  let distance = -(flow.phase % cycle);
+  // Shifts the pattern toward "to" as phase grows, flow runs from source
+  // to destination (battery toward servers, servers toward radiator).
+  // -(phase % cycle) shifts the other way, a bug caught while
+  // generalising this for #53, #52 never checked direction, only motion.
+  let distance = (flow.phase % cycle) - cycle;
   while (distance < totalLength) {
     const segmentStart = Math.max(distance, 0);
-    const segmentEnd = Math.min(distance + DASH_LENGTH, totalLength);
+    const segmentEnd = Math.min(distance + dashLength, totalLength);
     if (segmentEnd > segmentStart) {
       graphic.moveTo(flow.fromX + ux * segmentStart, flow.fromY + uy * segmentStart);
       graphic.lineTo(flow.fromX + ux * segmentEnd, flow.fromY + uy * segmentEnd);
@@ -117,7 +138,7 @@ function buildScene(app: PixiApplication): SceneRefs {
     nodeGraphics: new Map(),
     edgeGraphics: new Map(),
     glowFilters: new Map(),
-    powerLineFlow: new Map(),
+    edgeFlow: new Map(),
   };
 
   app.ticker.add((ticker) => {
@@ -131,9 +152,9 @@ function buildScene(app: PixiApplication): SceneRefs {
       }
     }
 
-    // Only the dashed power_line edges redraw per frame, the rest of the
-    // scene stays untouched, keeping this cheap regardless of frame rate.
-    for (const [edgeId, flow] of scene.powerLineFlow) {
+    // Only animated edges redraw per frame, the rest of the scene stays
+    // untouched, keeping this cheap regardless of frame rate.
+    for (const [edgeId, flow] of scene.edgeFlow) {
       const graphic = scene.edgeGraphics.get(edgeId);
       if (!graphic) continue;
       flow.phase += flow.speed * ticker.deltaMS;
@@ -148,7 +169,7 @@ function buildScene(app: PixiApplication): SceneRefs {
 // backend streams a new snapshot every tick, rebuilding would reset the
 // user's pan and zoom position every couple of seconds.
 function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
-  const { viewport, nodeGraphics, edgeGraphics, glowFilters, powerLineFlow } = scene;
+  const { viewport, nodeGraphics, edgeGraphics, glowFilters, edgeFlow } = scene;
   const seenNodeIds = new Set<string>();
   const seenEdgeIds = new Set<string>();
 
@@ -168,27 +189,30 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
       continue;
     }
 
-    // An animated flow for a severed power_line would show current still
-    // moving through a line that physically can't carry any, so severed
-    // edges fall back to the static stroke regardless of type.
-    const animated = edge.type === "power_line" && edge.status !== "severed";
+    const color = EDGE_COLOR[edge.status] ?? EDGE_TYPE_COLOR[edge.type];
+
+    // An animated flow for a severed edge would show current, coolant, or
+    // traffic still moving through a line that physically can't carry
+    // any, so severed edges fall back to the static stroke.
+    const animated = edge.status !== "severed";
     if (animated) {
-      const existing = powerLineFlow.get(edge.id);
-      const speed = (edge.currentFlow ?? 0) * DASH_SPEED_PX_PER_MS_PER_FLOW_UNIT;
-      powerLineFlow.set(edge.id, {
+      const existing = edgeFlow.get(edge.id);
+      const speed = (edge.currentFlow ?? 0) * DASH_PATTERN[edge.type].speedScale;
+      edgeFlow.set(edge.id, {
+        type: edge.type,
         fromX: from.position.x,
         fromY: from.position.y,
         toX: to.position.x,
         toY: to.position.y,
-        color: EDGE_COLOR[edge.status],
+        color,
         speed,
         phase: existing?.phase ?? 0,
       });
     } else {
-      powerLineFlow.delete(edge.id);
+      edgeFlow.delete(edge.id);
       graphic.clear();
       graphic.moveTo(from.position.x, from.position.y).lineTo(to.position.x, to.position.y);
-      graphic.stroke({ width: 2, color: EDGE_COLOR[edge.status] });
+      graphic.stroke({ width: 2, color });
     }
   }
 
@@ -242,7 +266,7 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
     if (!seenEdgeIds.has(id)) {
       graphic.destroy();
       edgeGraphics.delete(id);
-      powerLineFlow.delete(id);
+      edgeFlow.delete(id);
     }
   }
 }
