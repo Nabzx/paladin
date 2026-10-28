@@ -5,7 +5,7 @@ import { Application } from "@pixi/react";
 import type { Application as PixiApplication } from "pixi.js";
 import { Graphics, Text, TextStyle } from "pixi.js";
 import { Viewport } from "pixi-viewport";
-import { GlowFilter } from "pixi-filters";
+import { CRTFilter, GlowFilter } from "pixi-filters";
 import type { EdgeStatus, EdgeType, NodeStatus, NodeType, Severity, TelemetrySnapshot } from "@/lib/schemas/telemetry";
 
 const NODE_COLOR: Record<NodeType, number> = {
@@ -45,6 +45,21 @@ function glowColorForNode(nodeId: string, status: NodeStatus, activeFaults: Tele
 const GLOW_PULSE_MIN = 1.5;
 const GLOW_PULSE_MAX = 4.5;
 const GLOW_PULSE_PERIOD_MS = 900;
+
+// Tuned against the console's actual #05080a background, not shipped on
+// CRTFilter's defaults (0.3 noise, 0.3 vignetting), which are generic and
+// visibly too heavy here, the console needs to stay legible (labels,
+// status colours) over aesthetic flourish.
+const CRT_OPTIONS = {
+  curvature: 2,
+  lineWidth: 1,
+  lineContrast: 0.3,
+  noise: 0.12,
+  noiseSize: 1,
+  vignetting: 0.3,
+  vignettingAlpha: 0.6,
+  vignettingBlur: 0.4,
+};
 
 // Status overrides EDGE_TYPE_COLOR's nominal-case colour, something wrong
 // matters more than what kind of line it is.
@@ -132,6 +147,14 @@ function buildScene(app: PixiApplication): SceneRefs {
   app.stage.addChild(viewport);
   viewport.drag().pinch().wheel().decelerate();
   viewport.moveCenter(500, 300);
+
+  // Stage-level, not per-object: a CRT effect simulates a physical
+  // screen, it should stay fixed in screen space regardless of how the
+  // viewport inside it pans or zooms. filterArea is pinned to the
+  // renderer's screen rect, not left to auto-compute from content
+  // bounds, which would shift as the viewport's visible content changes.
+  app.stage.filters = [new CRTFilter(CRT_OPTIONS)];
+  app.stage.filterArea = app.renderer.screen;
 
   const scene: SceneRefs = {
     viewport,
