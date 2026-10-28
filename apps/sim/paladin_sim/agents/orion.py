@@ -21,55 +21,112 @@ def _next_proposal_id() -> str:
     return f"P-{next(_proposal_ids)}"
 
 
-def _diagnose_at_risk_servers(state: SimulationState, fault: dict) -> list[str]:
-    at_risk = set(tesla.diagnose_overloaded_servers(state, fault))
-    for zone_id in vulcan.diagnose_overheating_zones(state, fault):
+def _status(from_agent: str, summary: str, node_ids: list[str] | None = None) -> dict:
+    payload: dict = {"summary": summary}
+    if node_ids:
+        payload["nodeIds"] = node_ids
+    return {"from": from_agent, "type": "status_broadcast", "payload": payload}
+
+
+def _propose_and_validate(state: SimulationState, fault: dict, fix: dict, trace: list[dict]) -> dict:
+    """Appends fix_proposal, athena's status, validation_request, and
+    validation_result to trace for one candidate fix. Returns the
+    validation_result payload."""
+    trace.append({"from": "mercury", "type": "fix_proposal", "payload": fix})
+    trace.append(_status("athena", f"validating proposal {fix['proposalId']}"))
+    trace.append({"from": "athena", "type": "validation_request", "payload": {"proposalId": fix["proposalId"]}})
+    result = check_fix(fix, fault, state)
+    trace.append({"from": "athena", "type": "validation_result", "payload": result})
+    return result
+
+
+def _diagnose_at_risk_servers(state: SimulationState, fault: dict, trace: list[dict]) -> list[str]:
+    overloaded = tesla.diagnose_overloaded_servers(state, fault)
+    trace.append(
+        _status(
+            "tesla",
+            f"{len(overloaded)} server(s) overloaded" if overloaded else "no overloaded servers",
+            overloaded,
+        )
+    )
+
+    zones = vulcan.diagnose_overheating_zones(state, fault)
+    trace.append(
+        _status(
+            "vulcan",
+            f"{len(zones)} thermal zone(s) overheating" if zones else "no overheating zones",
+            zones,
+        )
+    )
+
+    at_risk = set(overloaded)
+    for zone_id in zones:
         at_risk.update(vulcan.servers_feeding(state, zone_id))
     return sorted(at_risk)
 
 
-def _try_network_reroute(state: SimulationState, fault: dict, proposal_id: str) -> dict | None:
+def _try_network_reroute(state: SimulationState, fault: dict, trace: list[dict]) -> dict | None:
     affected = fault.get("affectedNodeIds", [])
-    if fault.get("affectedEdgeIds") and len(affected) == 2:
-        fix = mercury.propose_reroute(state, fault, affected[0], affected[1], proposal_id)
-        if fix is not None:
-            return fix
-    return None
+    if not (fault.get("affectedEdgeIds") and len(affected) == 2):
+        return None
+
+    trace.append(_status("mercury", f"proposing a network reroute around {affected[0]}-{affected[1]}"))
+    fix = mercury.propose_reroute(state, fault, affected[0], affected[1], _next_proposal_id())
+    if fix is None:
+        trace.append(_status("mercury", "no live alternate path found"))
+        return None
+    return fix
 
 
-def respond_to_fault(state: SimulationState, fault: dict) -> dict:
+def respond_to_fault(state: SimulationState, fault: dict) -> list[dict]:
     """Diagnose, propose, validate, and commit or roll back, for one fault.
 
-    Returns a commit or rollback message: {"type": ..., "payload": ...},
-    payload matching agent-protocol.schema.json's commitPayload or
-    rollbackPayload. Mutates state in place on commit, leaves it untouched
-    on rollback.
+    Returns the full ordered trace of agent-protocol messages this
+    response produces: {"from": ..., "type": ..., "payload": ...} dicts,
+    payload matching the sibling type's schema. The last entry is always
+    a commit or rollback. Mutates state in place on commit, leaves it
+    untouched on rollback.
     """
-    proposal_id = _next_proposal_id()
+    trace: list[dict] = []
 
-    network_fix = _try_network_reroute(state, fault, proposal_id)
+    network_fix = _try_network_reroute(state, fault, trace)
     if network_fix is not None:
-        result = check_fix(network_fix, fault, state)
+        result = _propose_and_validate(state, fault, network_fix, trace)
         if result["verdict"] == "pass":
             apply_fix(state.graph, network_fix)
-            return {"type": "commit", "payload": {"proposalId": proposal_id}}
+            trace.append({"from": "orion", "type": "commit", "payload": {"proposalId": network_fix["proposalId"]}})
+            return trace
 
-    at_risk_servers = _diagnose_at_risk_servers(state, fault)
+    last_proposal_id: str | None = None
+    at_risk_servers = _diagnose_at_risk_servers(state, fault, trace)
     for source_id in at_risk_servers:
         excluded: set[str] = set()
-        for _ in range(MAX_ATTEMPTS_PER_SOURCE):
-            fix = mercury.propose_migration(state, fault, source_id, proposal_id, excluded_target_ids=excluded)
+        for attempt in range(MAX_ATTEMPTS_PER_SOURCE):
+            retrying = ", retrying with a new target" if attempt else ""
+            trace.append(_status("mercury", f"proposing a workload migration off {source_id}{retrying}"))
+
+            fix = mercury.propose_migration(state, fault, source_id, _next_proposal_id(), excluded_target_ids=excluded)
             if fix is None:
+                trace.append(_status("mercury", f"no migration target available for {source_id}"))
                 break
 
-            result = check_fix(fix, fault, state)
+            last_proposal_id = fix["proposalId"]
+            result = _propose_and_validate(state, fault, fix, trace)
             if result["verdict"] == "pass":
                 apply_fix(state.graph, fix)
-                return {"type": "commit", "payload": {"proposalId": proposal_id}}
+                trace.append({"from": "orion", "type": "commit", "payload": {"proposalId": fix["proposalId"]}})
+                return trace
 
             excluded.add(fix["targetNodeIds"][0])
 
-    return {
-        "type": "rollback",
-        "payload": {"proposalId": proposal_id, "reason": "no candidate fix satisfied athena"},
-    }
+    trace.append(
+        {
+            "from": "orion",
+            "type": "rollback",
+            "payload": {
+                "proposalId": last_proposal_id or _next_proposal_id(),
+                "reason": "no candidate fix satisfied athena",
+            },
+        }
+    )
+    return trace

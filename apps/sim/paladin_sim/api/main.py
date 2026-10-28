@@ -85,7 +85,10 @@ FaultRequest = Annotated[
 @app.post("/faults")
 async def trigger_fault(request: FaultRequest) -> dict:
     """Injects a fault, lets ORION respond, and broadcasts every resulting
-    agent-protocol message to connected WebSocket clients.
+    agent-protocol message to connected WebSocket clients, in order:
+    the fault_alert, then ORION's full response trace (every diagnosis,
+    proposal, and validation step, not just the final verdict), then a
+    fresh telemetry snapshot.
     """
     fault_id = f"F-{next(_fault_ids)}"
 
@@ -107,11 +110,13 @@ async def trigger_fault(request: FaultRequest) -> dict:
 
     await connections.broadcast(make_message("orion", "fault_alert", fault_to_alert_payload(fault)))
 
-    result = orion.respond_to_fault(state, fault)
-    await connections.broadcast(make_message("orion", result["type"], result["payload"]))
+    trace = orion.respond_to_fault(state, fault)
+    for message in trace:
+        await connections.broadcast(make_message(message["from"], message["type"], message["payload"]))
     await connections.broadcast(telemetry_snapshot(state))
 
-    return {"fault": fault, "result": result}
+    final = trace[-1]
+    return {"fault": fault, "result": {"type": final["type"], "payload": final["payload"]}}
 
 
 @app.websocket("/ws")
