@@ -27,6 +27,11 @@ def test_ws_sends_a_telemetry_snapshot_on_connect() -> None:
 
 
 def test_triggering_a_cooling_breach_broadcasts_fault_alert_and_a_verdict() -> None:
+    # Wide enough for the full intermediate trace (status_broadcast per
+    # diagnosis/proposal/validation step, several retries possible), not
+    # just the first and last message, see #86.
+    MAX_MESSAGES = 30
+
     with TestClient(app) as client, client.websocket_connect("/ws") as websocket:
         websocket.receive_json()  # the initial snapshot on connect
 
@@ -34,7 +39,7 @@ def test_triggering_a_cooling_breach_broadcasts_fault_alert_and_a_verdict() -> N
         assert response.status_code == 200
 
         received_types = set()
-        for _ in range(5):
+        for _ in range(MAX_MESSAGES):
             message = websocket.receive_json()
             jsonschema.Draft202012Validator(ENVELOPE_SCHEMA).validate(message)
             received_types.add(message["type"])
@@ -53,7 +58,7 @@ def test_triggering_a_fault_appears_in_the_next_snapshots_active_faults() -> Non
         fault_id = response.json()["fault"]["id"]
 
         snapshot = None
-        for _ in range(5):
+        for _ in range(30):  # wide enough for the full intermediate trace, see #86
             message = websocket.receive_json()
             if "nodes" in message:
                 snapshot = message
