@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { AlarmToggle } from "@/components/AlarmToggle";
+import { CockpitHud } from "@/components/CockpitHud";
 import { MissionLog } from "@/components/ops-deck/MissionLog";
 import { OpsDeck } from "@/components/ops-deck/OpsDeck";
 import { useAlarmKlaxon } from "@/lib/audio/useAlarmKlaxon";
@@ -45,6 +46,7 @@ export default function Home() {
       </div>
       <OpsDeck messages={messages} />
       <MissionLog messages={messages} />
+      <CockpitHud snapshot={snapshot} />
       <Console snapshot={snapshot} />
     </main>
   );
