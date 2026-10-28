@@ -88,6 +88,7 @@ def respond_to_fault(state: SimulationState, fault: dict) -> list[dict]:
     untouched on rollback.
     """
     trace: list[dict] = []
+    trace.append(_status("orion", f"responding to {fault['type']} ({fault['id']})", fault.get("affectedNodeIds", [])))
 
     network_fix = _try_network_reroute(state, fault, trace)
     if network_fix is not None:

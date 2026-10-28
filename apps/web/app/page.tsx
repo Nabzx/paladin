@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { OpsDeck } from "@/components/ops-deck/OpsDeck";
 import { useStationSocket } from "@/lib/telemetry/useStationSocket";
 
 // PixiJS needs a real canvas and window, disabling SSR for it avoids
@@ -35,6 +36,7 @@ export default function Home() {
           <p className="text-sm text-zinc-400">last message: {messages[messages.length - 1].type}</p>
         )}
       </div>
+      <OpsDeck messages={messages} />
       <Console snapshot={snapshot} />
     </main>
   );

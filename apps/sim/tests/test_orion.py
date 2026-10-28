@@ -64,7 +64,9 @@ def test_orion_trace_starts_with_diagnosis_status_broadcasts() -> None:
     trace = orion.respond_to_fault(state, fault)
 
     status_broadcasts = [msg for msg in trace if msg["type"] == "status_broadcast"]
-    assert {msg["from"] for msg in status_broadcasts} >= {"tesla", "vulcan", "mercury", "athena"}
+    assert {msg["from"] for msg in status_broadcasts} >= {"orion", "tesla", "vulcan", "mercury", "athena"}
+    assert trace[0]["from"] == "orion"
+    assert trace[0]["type"] == "status_broadcast"
     for msg in status_broadcasts:
         _payload_validator("statusBroadcastPayload").validate(msg["payload"])
 
