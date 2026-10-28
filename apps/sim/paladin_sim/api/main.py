@@ -113,9 +113,16 @@ async def trigger_fault(request: FaultRequest) -> dict:
     trace = orion.respond_to_fault(state, fault)
     for message in trace:
         await connections.broadcast(make_message(message["from"], message["type"], message["payload"]))
-    await connections.broadcast(telemetry_snapshot(state))
 
     final = trace[-1]
+    if final["type"] == "commit":
+        # A committed fix resolves this fault, found while building #62's
+        # HUD: active_faults was append-only, never cleared, an "active
+        # fault count" would only ever grow regardless of what ORION fixed.
+        state.active_faults = [f for f in state.active_faults if f["id"] != fault["id"]]
+
+    await connections.broadcast(telemetry_snapshot(state))
+
     return {"fault": fault, "result": {"type": final["type"], "payload": final["payload"]}}
 
 
