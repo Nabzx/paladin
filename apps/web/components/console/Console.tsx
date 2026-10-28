@@ -61,6 +61,14 @@ const CRT_OPTIONS = {
   vignettingBlur: 0.4,
 };
 
+// A short, decaying burst of flashes, not a sustained effect, distinct
+// from the stage's constant CRTFilter. Deterministic (a function of
+// elapsed time only, no per-frame randomness) so the render is
+// reproducible for live pixel verification.
+const FLICKER_DURATION_MS = 260;
+const FLICKER_FLASHES = 5;
+const FLICKER_MAX_ALPHA = 0.55;
+
 // Status overrides EDGE_TYPE_COLOR's nominal-case colour, something wrong
 // matters more than what kind of line it is.
 const EDGE_COLOR: Partial<Record<EdgeStatus, number>> = {
@@ -106,6 +114,10 @@ interface SceneRefs {
   edgeGraphics: Map<string, Graphics>;
   glowFilters: Map<string, GlowFilter>;
   edgeFlow: Map<string, EdgeFlow>;
+  flickerOverlay: Graphics;
+  flickerStartMs: number | null;
+  knownFaultIds: Set<string>;
+  hasSyncedOnce: boolean;
 }
 
 function drawDashedLine(graphic: Graphics, flow: EdgeFlow): void {
@@ -156,12 +168,22 @@ function buildScene(app: PixiApplication): SceneRefs {
   app.stage.filters = [new CRTFilter(CRT_OPTIONS)];
   app.stage.filterArea = app.renderer.screen;
 
+  // Drawn directly on the stage, after the viewport, so it sits on top of
+  // the graph and still passes through the same CRTFilter. Empty until a
+  // flicker is active, so it costs nothing the rest of the time.
+  const flickerOverlay = new Graphics();
+  app.stage.addChild(flickerOverlay);
+
   const scene: SceneRefs = {
     viewport,
     nodeGraphics: new Map(),
     edgeGraphics: new Map(),
     glowFilters: new Map(),
     edgeFlow: new Map(),
+    flickerOverlay,
+    flickerStartMs: null,
+    knownFaultIds: new Set(),
+    hasSyncedOnce: false,
   };
 
   app.ticker.add((ticker) => {
@@ -183,6 +205,24 @@ function buildScene(app: PixiApplication): SceneRefs {
       flow.phase += flow.speed * ticker.deltaMS;
       drawDashedLine(graphic, flow);
     }
+
+    // Redrawn fresh each active frame (not sized once at creation) so it
+    // always matches the current renderer size, resizeTo={window} can
+    // change that mid-burst.
+    if (scene.flickerStartMs !== null) {
+      const elapsed = performance.now() - scene.flickerStartMs;
+      if (elapsed >= FLICKER_DURATION_MS) {
+        scene.flickerOverlay.clear();
+        scene.flickerStartMs = null;
+      } else {
+        const progress = elapsed / FLICKER_DURATION_MS;
+        const alpha = Math.abs(Math.sin(progress * FLICKER_FLASHES * Math.PI)) * (1 - progress) * FLICKER_MAX_ALPHA;
+        scene.flickerOverlay
+          .clear()
+          .rect(0, 0, app.renderer.width, app.renderer.height)
+          .fill({ color: 0xffffff, alpha });
+      }
+    }
   });
 
   return scene;
@@ -195,6 +235,17 @@ function syncScene(scene: SceneRefs, snapshot: TelemetrySnapshot): void {
   const { viewport, nodeGraphics, edgeGraphics, glowFilters, edgeFlow } = scene;
   const seenNodeIds = new Set<string>();
   const seenEdgeIds = new Set<string>();
+
+  // The very first sync after connecting (or reconnecting mid-incident)
+  // seeds knownFaultIds without flickering, a fault that was already
+  // active before this client ever connected isn't "just injected", only
+  // faults that appear after that baseline should burst.
+  for (const fault of snapshot.activeFaults ?? []) {
+    if (scene.knownFaultIds.has(fault.id)) continue;
+    scene.knownFaultIds.add(fault.id);
+    if (scene.hasSyncedOnce) scene.flickerStartMs = performance.now();
+  }
+  scene.hasSyncedOnce = true;
 
   for (const edge of snapshot.edges) {
     seenEdgeIds.add(edge.id);
