@@ -41,7 +41,10 @@ export function CockpitHud({ snapshot }: CockpitHudProps) {
   const tick = snapshot ? String(snapshot.tick).padStart(5, "0") : "-----";
   const faultCount = snapshot?.activeFaults?.length ?? 0;
   const worstSeverity = snapshot ? worstFaultSeverity(snapshot.activeFaults) : null;
-  const faultColor = worstSeverity ? FAULT_SEVERITY_COLOR[worstSeverity] : "#5a6060";
+  // No active faults carries no severity to be semantic about, this one
+  // reading is chrome-neutral, not a fixed hex, unlike every other colour
+  // on this panel.
+  const faultColor = worstSeverity ? FAULT_SEVERITY_COLOR[worstSeverity] : "var(--chrome-border-dim)";
   const health = snapshot ? stationHealth(snapshot.nodes) : { level: "nominal" as const, percent: 100 };
   const healthColor = HEALTH_COLOR[health.level];
   const filledSegments = Math.round((health.percent / 100) * 10);
