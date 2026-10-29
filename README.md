@@ -9,6 +9,8 @@
 [![Status](https://img.shields.io/badge/status-in%20development-blue?style=flat-square)]()
 [![Licence](https://img.shields.io/badge/licence-TBD-lightgrey?style=flat-square)]()
 
+![PALADIN-Station mid-incident: a severed network link, MERCURY's proposal rejected and flashing red, ATHENA's verification gate catching it, all five agents live on the Operations Deck](docs/images/console-demo.png)
+
 </div>
 
 ---
