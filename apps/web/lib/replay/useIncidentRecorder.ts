@@ -14,14 +14,17 @@ export interface HistoryEntry {
   messages: AgentMessage[];
 }
 
-// One entry per new message, not just per snapshot: the backend applies a
-// fix atomically, so there's only ever one snapshot before a fault and one
-// after, but the message stream carries the richer intermediate beats
-// (a checking pulse, a rejected proposal, a retry) #65/#66 already render
-// live. Recording at message granularity lets scrubbing show those beats
-// too, not just a flat before/after graph state. A tick-only update (no
-// new message, the periodic 2s loop) still records its own entry, so
-// scrubbing through quiet periods advances the clock correctly.
+// Records on a new message OR a new tick, not only on a new snapshot: the
+// backend applies a fix atomically, so there's only ever one snapshot
+// before a fault and one after, a snapshot-only recording would scrub as
+// a flat before/after with nothing in between. In practice a whole fault
+// response's messages usually arrive within the same React commit (the
+// backend resolves and broadcasts the full trace in milliseconds, and
+// React 18 batches state updates that land in the same task), so this
+// typically yields a handful of steps per incident (quiet -> fault
+// detected -> resolved), not one step per individual message, scrubbing
+// still moves through genuinely distinct recorded moments, just coarser
+// than per-message, found live verifying this.
 export function useIncidentRecorder(snapshot: TelemetrySnapshot | null, messages: AgentMessage[]): HistoryEntry[] {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
