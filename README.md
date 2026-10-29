@@ -6,8 +6,8 @@
 
 **Project PALADIN is an interactive 2D application simulating PALADIN-Station, an orbital edge-compute facility. When a solar flare, a micrometeoroid puncture, or a cooling breach strikes, five autonomous engineering agents diagnose and fix it live, on a retro sci-fi tactical console, with every fix formally checked before it's applied.**
 
-[![Status](https://img.shields.io/badge/status-in%20development-blue?style=flat-square)]()
-[![Licence](https://img.shields.io/badge/licence-TBD-lightgrey?style=flat-square)]()
+[![CI](https://github.com/Nabzx/paladin/actions/workflows/ci.yml/badge.svg)](https://github.com/Nabzx/paladin/actions/workflows/ci.yml)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue?style=flat-square)](LICENSE)
 
 ![PALADIN-Station mid-incident: a severed network link, MERCURY's proposal rejected and flashing red, ATHENA's verification gate catching it, all five agents live on the Operations Deck](docs/images/console-demo.png)
 
@@ -84,4 +84,4 @@ This repository follows a phase-and-wayfinder structure for planning and trackin
 
 ## Licence
 
-To be decided.
+[MIT](LICENSE).
