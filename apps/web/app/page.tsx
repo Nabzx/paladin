@@ -5,8 +5,11 @@ import { AlarmToggle } from "@/components/AlarmToggle";
 import { CockpitHud } from "@/components/CockpitHud";
 import { MissionLog } from "@/components/ops-deck/MissionLog";
 import { OpsDeck } from "@/components/ops-deck/OpsDeck";
+import { ReplayControl } from "@/components/ReplayControl";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAlarmKlaxon } from "@/lib/audio/useAlarmKlaxon";
+import { useIncidentRecorder } from "@/lib/replay/useIncidentRecorder";
+import { useReplay } from "@/lib/replay/useReplay";
 import { useStationSocket } from "@/lib/telemetry/useStationSocket";
 import { useTheme } from "@/lib/theme/useTheme";
 
@@ -18,8 +21,17 @@ const Console = dynamic(() => import("@/components/console/Console").then((modul
 
 export default function Home() {
   const { status, snapshot, messages } = useStationSocket();
+  // Tied to live messages always, not the replay's: re-triggering the
+  // klaxon by scrubbing past an old fault would be a surprising side
+  // effect of navigating history, not something a replay control implies.
   const { muted, toggleMuted } = useAlarmKlaxon(messages);
   const { theme, toggleTheme } = useTheme();
+
+  const history = useIncidentRecorder(snapshot, messages);
+  const { scrubIndex, playing, scrubTo, goLive, togglePlaying } = useReplay(history);
+  const replaying = scrubIndex !== null;
+  const displaySnapshot = replaying ? history[scrubIndex].snapshot : snapshot;
+  const displayMessages = replaying ? history[scrubIndex].messages : messages;
 
   return (
     <main className="relative min-h-screen bg-black">
@@ -45,20 +57,31 @@ export default function Home() {
               {status.toUpperCase()}
             </span>
           </p>
-          {snapshot && (
+          {replaying && <p className="text-sm text-amber-400">REPLAY</p>}
+          {displaySnapshot && (
             <p className="text-sm text-[var(--chrome-text-tertiary)]">
-              tick {snapshot.tick} · {snapshot.nodes.length} nodes · {snapshot.edges.length} edges
+              tick {displaySnapshot.tick} · {displaySnapshot.nodes.length} nodes · {displaySnapshot.edges.length} edges
             </p>
           )}
-          {messages.length > 0 && (
-            <p className="text-sm text-[var(--chrome-text-tertiary)]">last message: {messages[messages.length - 1].type}</p>
+          {displayMessages.length > 0 && (
+            <p className="text-sm text-[var(--chrome-text-tertiary)]">
+              last message: {displayMessages[displayMessages.length - 1].type}
+            </p>
           )}
         </div>
-        <OpsDeck messages={messages} />
-        <MissionLog messages={messages} />
-        <CockpitHud snapshot={snapshot} />
+        <OpsDeck messages={displayMessages} />
+        <MissionLog messages={displayMessages} />
+        <CockpitHud snapshot={displaySnapshot} />
+        <ReplayControl
+          history={history}
+          scrubIndex={scrubIndex}
+          playing={playing}
+          onScrub={scrubTo}
+          onGoLive={goLive}
+          onTogglePlaying={togglePlaying}
+        />
       </div>
-      <Console snapshot={snapshot} messages={messages} />
+      <Console snapshot={displaySnapshot} messages={displayMessages} />
     </main>
   );
 }
