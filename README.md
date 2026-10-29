@@ -33,6 +33,49 @@ This is a long-running personal project, built for its own sake out of genuine i
 
 See `CONTEXT.md` for the full domain model and `docs/architecture/ARCHITECTURE.md` for the system design.
 
+## Run it locally
+
+Needs [uv](https://docs.astral.sh/uv/) and Node 20+.
+
+```
+git clone https://github.com/Nabzx/paladin.git
+cd paladin
+
+# Terminal 1: the simulation backend
+cd apps/sim
+uv run uvicorn paladin_sim.api.main:app --reload
+
+# Terminal 2: the frontend
+cd apps/web
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). The Console should show ten nodes, idle, and the status line should read `Link: OPEN`. To see a fault play out end to end, trigger one from a third terminal:
+
+```
+curl -X POST http://localhost:8000/faults \
+  -H "Content-Type: application/json" \
+  -d '{"type": "solar_flare", "node_id": "SRV-01", "severity": "p1"}'
+```
+
+Watch the console: a flicker burst, the camera pans and zooms onto `SRV-01`, the five agent cards light up in sequence, the mission log fills in, and the alarm klaxon plays (click anywhere on the page first, browsers block audio before a user gesture). The other two fault types:
+
+```
+# a severed power_line or network_link
+curl -X POST http://localhost:8000/faults \
+  -H "Content-Type: application/json" \
+  -d '{"type": "micrometeoroid_puncture", "from_id": "SRV-01", "to_id": "SRV-02", "severity": "p2"}'
+
+# a severed coolant_line
+curl -X POST http://localhost:8000/faults \
+  -H "Content-Type: application/json" \
+  -d '{"type": "cooling_breach", "from_id": "THERM-N", "to_id": "RAD-1", "severity": "p3"}'
+```
+
+See `apps/sim/README.md` and `apps/web/README.md` for each service's own details, test commands, and (for the web app) exactly how each visual effect is built.
+
 ## Structure
 
 This repository follows a phase-and-wayfinder structure for planning and tracking work. See `AGENTS.md` for the full convention, and `ROADMAP.md` for the current phase table.
