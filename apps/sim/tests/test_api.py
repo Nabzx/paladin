@@ -102,3 +102,32 @@ def test_fault_severity_can_be_overridden_in_the_request() -> None:
 
     assert response.status_code == 200
     assert response.json()["fault"]["severity"] == "p1"
+
+
+def test_reset_state_clears_tick_and_active_faults() -> None:
+    # Public-demo housekeeping (#100): a shared global state needs a way
+    # back to a clean baseline, nothing else ever clears it.
+    from paladin_sim.api.main import _reset_state, state
+
+    with TestClient(app) as client:
+        client.post("/faults", json={"type": "solar_flare", "node_id": "BATT-1"})
+        assert state.tick > 0 or state.active_faults
+
+        _reset_state()
+
+    assert state.tick == 0
+    assert state.active_faults == []
+    assert state.graph.nodes["SRV-01"]["metrics"]["powerLoadPercent"] == 50.0
+
+
+def test_cors_allows_a_vercel_origin() -> None:
+    with TestClient(app) as client:
+        response = client.options(
+            "/faults",
+            headers={
+                "Origin": "https://paladin-demo.vercel.app",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+
+    assert response.headers.get("access-control-allow-origin") == "https://paladin-demo.vercel.app"

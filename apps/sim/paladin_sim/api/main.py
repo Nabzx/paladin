@@ -16,6 +16,10 @@ from paladin_sim.engine.grid import build_sample_topology
 from paladin_sim.sim_loop import SimulationState, advance_tick
 
 TICK_INTERVAL_SECONDS = 2.0
+# Housekeeping for a public demo deploy only: one shared, global,
+# in-memory state means every visitor's fault injections affect what
+# everyone else sees, and nothing else ever clears it (#100).
+RESET_INTERVAL_SECONDS = 30 * 60
 
 state = SimulationState(graph=build_sample_topology().graph)
 connections = ConnectionManager()
@@ -29,13 +33,28 @@ async def _tick_loop() -> None:
         await connections.broadcast(telemetry_snapshot(state))
 
 
+def _reset_state() -> None:
+    state.graph = build_sample_topology().graph
+    state.tick = 0
+    state.active_faults = []
+
+
+async def _reset_loop() -> None:
+    while True:
+        await asyncio.sleep(RESET_INTERVAL_SECONDS)
+        _reset_state()
+        await connections.broadcast(telemetry_snapshot(state))
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    task = asyncio.create_task(_tick_loop())
+    tasks = [asyncio.create_task(_tick_loop()), asyncio.create_task(_reset_loop())]
     yield
-    task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await task
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 app = FastAPI(title="paladin-sim", lifespan=lifespan)
@@ -43,6 +62,10 @@ app = FastAPI(title="paladin-sim", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
+    # Covers a Vercel deploy's assigned origin, whatever subdomain it
+    # lands on, scoped to Vercel's own domain rather than a fully open
+    # policy (#100, a temporary public demo).
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
