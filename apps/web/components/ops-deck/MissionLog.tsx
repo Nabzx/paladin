@@ -79,12 +79,12 @@ export function MissionLog({ messages }: MissionLogProps) {
   }, [messages]);
 
   return (
-    <div className="pointer-events-none absolute bottom-4 left-4 z-10 w-[32rem] max-w-[calc(100vw-2rem)] border border-[#2a2f2f] bg-black/60 font-mono">
-      <div className="border-b border-[#2a2f2f] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+    <div className="pointer-events-none absolute bottom-4 left-4 z-10 w-[32rem] max-w-[calc(100vw-2rem)] border border-[var(--chrome-border)] bg-[var(--chrome-bg)] font-mono">
+      <div className="border-b border-[var(--chrome-border)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[var(--chrome-text-secondary)]">
         Mission Log
       </div>
       <div ref={scrollRef} className="h-36 overflow-y-auto px-3 py-2 text-[11px] leading-5">
-        {messages.length === 0 && <p className="text-zinc-600">no activity yet</p>}
+        {messages.length === 0 && <p className="text-[var(--chrome-text-secondary)]">no activity yet</p>}
         {messages.map((message) => {
           const { text, color } = formatLine(message);
           return (

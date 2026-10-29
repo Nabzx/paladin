@@ -24,3 +24,27 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Operations Deck chrome only (#67), never the Tactical Console: its
+   neutral panel backgrounds, borders, and structural text. Semantic
+   colours (agent accents, severity, verdict colours) stay the same in
+   both themes, they carry meaning, not just a light/dark preference. */
+:root {
+  --chrome-bg: rgb(0 0 0 / 0.6);
+  --chrome-border: #2a2f2f;
+  --chrome-border-bright: #3a3f3f;
+  --chrome-border-dim: #5a6060;
+  --chrome-text-primary: #e4e4e7;
+  --chrome-text-secondary: #71717a;
+  --chrome-text-tertiary: #a1a1aa;
+}
+
+[data-theme="light"] {
+  --chrome-bg: rgb(255 255 255 / 0.85);
+  --chrome-border: #d4d4d8;
+  --chrome-border-bright: #a1a1aa;
+  --chrome-border-dim: #71717a;
+  --chrome-text-primary: #18181b;
+  --chrome-text-secondary: #52525b;
+  --chrome-text-tertiary: #3f3f46;
+}

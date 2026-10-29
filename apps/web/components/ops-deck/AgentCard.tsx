@@ -32,34 +32,35 @@ export function AgentCard({ icon, name, role, task, accent, latestMessageId, pul
   const active = useMessageHold(latestMessageId, ACTIVE_HOLD_MS);
 
   const pulsing = pulseOverride !== undefined;
-  const borderColor = pulseOverride ?? (active ? accent : "#2a2f2f");
+  const idleBorder = "var(--chrome-border)";
+  const borderColor = pulseOverride ?? (active ? accent : idleBorder);
   const lit = pulsing || active;
 
   return (
     <div
-      className={`flex w-72 items-stretch gap-3 border bg-black/60 px-3 py-2 font-mono transition-colors duration-500 ${pulsing ? "animate-pulse" : ""}`}
+      className={`flex w-72 items-stretch gap-3 border bg-[var(--chrome-bg)] px-3 py-2 font-mono transition-colors duration-500 ${pulsing ? "animate-pulse" : ""}`}
       style={{ borderColor }}
     >
       <div
         className={`flex h-10 w-10 shrink-0 items-center justify-center border transition-colors duration-500 ${pulsing ? "animate-pulse" : ""}`}
-        style={{ borderColor: lit ? borderColor : "#3a3f3f", color: lit ? borderColor : "#5a6060" }}
+        style={{ borderColor: lit ? borderColor : "var(--chrome-border-bright)", color: lit ? borderColor : "var(--chrome-border-dim)" }}
       >
         {icon}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-bold tracking-[0.15em] text-zinc-200">{name}</span>
+          <span className="text-xs font-bold tracking-[0.15em] text-[var(--chrome-text-primary)]">{name}</span>
           <span
             className={`h-1.5 w-1.5 shrink-0 rounded-full transition-all duration-500 ${pulsing ? "animate-pulse" : ""}`}
             style={{
               backgroundColor: lit ? borderColor : "transparent",
-              border: lit ? "none" : "1px solid #5a6060",
+              border: lit ? "none" : "1px solid var(--chrome-border-dim)",
               boxShadow: lit ? `0 0 6px 1px ${borderColor}` : "none",
             }}
           />
         </div>
-        <p className="mt-0.5 text-[10px] uppercase tracking-[0.1em] text-zinc-500">{role}</p>
-        <p className="mt-1 truncate text-[11px] text-zinc-400">{task}</p>
+        <p className="mt-0.5 text-[10px] uppercase tracking-[0.1em] text-[var(--chrome-text-secondary)]">{role}</p>
+        <p className="mt-1 truncate text-[11px] text-[var(--chrome-text-tertiary)]">{task}</p>
       </div>
     </div>
   );
