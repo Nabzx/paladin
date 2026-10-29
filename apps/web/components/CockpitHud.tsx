@@ -47,19 +47,19 @@ export function CockpitHud({ snapshot }: CockpitHudProps) {
   const filledSegments = Math.round((health.percent / 100) * 10);
 
   return (
-    <div className="pointer-events-none absolute bottom-4 right-4 z-10 flex border border-[#2a2f2f] bg-black/60 font-mono text-zinc-200">
-      <div className="border-r border-[#2a2f2f] px-4 py-2">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Tick</p>
+    <div className="pointer-events-none absolute bottom-4 right-4 z-10 flex border border-[var(--chrome-border)] bg-[var(--chrome-bg)] font-mono text-[var(--chrome-text-primary)]">
+      <div className="border-r border-[var(--chrome-border)] px-4 py-2">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--chrome-text-secondary)]">Tick</p>
         <p className="mt-1 text-lg tabular-nums tracking-wider text-emerald-400">{tick}</p>
       </div>
-      <div className="border-r border-[#2a2f2f] px-4 py-2">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Active Faults</p>
+      <div className="border-r border-[var(--chrome-border)] px-4 py-2">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--chrome-text-secondary)]">Active Faults</p>
         <p className="mt-1 text-lg tabular-nums tracking-wider" style={{ color: faultColor }}>
           {String(faultCount).padStart(2, "0")}
         </p>
       </div>
       <div className="px-4 py-2">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Station Health</p>
+        <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--chrome-text-secondary)]">Station Health</p>
         <p className="mt-1 text-lg uppercase tracking-wider" style={{ color: healthColor }}>
           {health.level}
         </p>
@@ -68,7 +68,7 @@ export function CockpitHud({ snapshot }: CockpitHudProps) {
             <span
               key={i}
               className="h-1.5 w-2"
-              style={{ backgroundColor: i < filledSegments ? healthColor : "#2a2f2f" }}
+              style={{ backgroundColor: i < filledSegments ? healthColor : "var(--chrome-border)" }}
             />
           ))}
         </div>
