@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted for Phase 3. Phase 4 (#108) is deliberately moving the Console and Operations Deck from this line/circle schematic language to a retro pixel-art one, superseding most of the look described below. This ADR stays as the historical record of what Phase 3 actually settled on; a new ADR replaces it once Phase 4's own look has settled (#126). Not everything here is superseded, the dramatised-timing philosophy and the semantic-vs-chrome colour rule are still the standing convention.
 
 ## Context
 
