@@ -3,22 +3,30 @@
 import { useRef } from "react";
 import { Application } from "@pixi/react";
 import type { Application as PixiApplication } from "pixi.js";
-import { Graphics } from "pixi.js";
+import { Graphics, Sprite } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import { buildFloorPlan } from "@/lib/floorplan/buildFloorPlan";
 import { createTileViewport, TILE_SIZE } from "@/lib/floorplan/tileCamera";
-import type { TelemetrySnapshot } from "@/lib/schemas/telemetry";
+import { bakeNodeTextures } from "@/lib/sprites/nodeSprites";
+import type { NodeStatus, TelemetrySnapshot } from "@/lib/schemas/telemetry";
 
-// Placeholder room/corridor markers only, proving the camera's pan/zoom
-// works over real tile-grid bounds. Real per-type sprites are #117
-// (rooms) and #118 (corridors), not this ticket's scope.
-function drawPlaceholders(
+// Multiplicative sprite tints, applied over the baked texture rather
+// than a second baked texture: status overriding identity is ADR-0005's
+// existing rule, this is that rule expressed via Sprite.tint instead of
+// a fill colour. #121 replaces this with the researched palette-swap
+// treatment (#113); this is the minimum needed for #117's own DoD,
+// status still visibly overrides identity.
+const STATUS_TINT: Partial<Record<NodeStatus, number>> = {
+  degraded: 0xffaa33,
+  critical: 0xff3344,
+};
+
+// Corridor placeholders only, real sprites are #118, not this ticket.
+function drawCorridorPlaceholders(
   viewport: Viewport,
-  snapshot: TelemetrySnapshot,
+  floorPlan: ReturnType<typeof buildFloorPlan>,
   tileToWorld: (tile: { x: number; y: number }) => { x: number; y: number },
 ): void {
-  const floorPlan = buildFloorPlan(snapshot);
-
   for (const path of floorPlan.corridors.values()) {
     for (const tile of path) {
       const { x, y } = tileToWorld(tile);
@@ -27,12 +35,30 @@ function drawPlaceholders(
       viewport.addChild(corridor);
     }
   }
+}
 
-  for (const tile of floorPlan.rooms.values()) {
+function drawRoomSprites(
+  app: PixiApplication,
+  viewport: Viewport,
+  snapshot: TelemetrySnapshot,
+  floorPlan: ReturnType<typeof buildFloorPlan>,
+  tileToWorld: (tile: { x: number; y: number }) => { x: number; y: number },
+): void {
+  const textures = bakeNodeTextures(app);
+  const bakedSize = 16 * 4; // CELL_PX (bakeSprite.ts) * 16 cells
+
+  for (const node of snapshot.nodes) {
+    const tile = floorPlan.rooms.get(node.id);
+    if (!tile) continue;
     const { x, y } = tileToWorld(tile);
-    const room = new Graphics();
-    room.rect(x - TILE_SIZE / 2, y - TILE_SIZE / 2, TILE_SIZE, TILE_SIZE).fill({ color: 0x39ff88 });
-    viewport.addChild(room);
+
+    const sprite = new Sprite(textures[node.type]);
+    sprite.anchor.set(0.5);
+    sprite.x = x;
+    sprite.y = y;
+    sprite.scale.set(TILE_SIZE / bakedSize);
+    sprite.tint = STATUS_TINT[node.status] ?? 0xffffff;
+    viewport.addChild(sprite);
   }
 }
 
@@ -53,7 +79,8 @@ export function TileConsole({ snapshot }: TileConsoleProps) {
         const floorPlan = buildFloorPlan(snapshot);
         const { viewport, tileToWorld } = createTileViewport(app, floorPlan);
         app.stage.addChild(viewport);
-        drawPlaceholders(viewport, snapshot, tileToWorld);
+        drawCorridorPlaceholders(viewport, floorPlan, tileToWorld);
+        drawRoomSprites(app, viewport, snapshot, floorPlan, tileToWorld);
       }}
     />
   );
