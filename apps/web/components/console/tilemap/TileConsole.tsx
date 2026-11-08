@@ -2,21 +2,22 @@
 
 import { useEffect, useRef } from "react";
 import { Application } from "@pixi/react";
-import type { Application as PixiApplication } from "pixi.js";
+import type { Application as PixiApplication, Texture } from "pixi.js";
 import { Sprite } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import { buildFloorPlan } from "@/lib/floorplan/buildFloorPlan";
 import type { FloorPlan, TilePosition } from "@/lib/floorplan/buildFloorPlan";
 import { createTileViewport, TILE_SIZE } from "@/lib/floorplan/tileCamera";
-import { bakeNodeTextures } from "@/lib/sprites/nodeSprites";
+import { bakeAlarmNodeTexture, bakeNodeTextures } from "@/lib/sprites/nodeSprites";
 import { bakeCorridorTextures } from "@/lib/sprites/corridorSprites";
 import { bakeAgentTextures } from "@/lib/sprites/agentSprites";
 import { corridorPolyline, FLOW_SPEED_SCALE, pointAtDistance, polylineLength } from "@/lib/sprites/corridorFlow";
 import type { Point } from "@/lib/sprites/corridorFlow";
 import { startAgentWalk, targetNodeIdFromMessage, WALK_MS_PER_TILE } from "@/lib/sprites/agentMovement";
 import type { AgentWalk } from "@/lib/sprites/agentMovement";
+import { ALARM_BLINK_PERIOD_MS, ALARM_STATUSES, alarmColorForNode } from "@/lib/sprites/alarm";
 import type { AgentId, AgentMessage } from "@/lib/schemas/agent-protocol";
-import type { NodeStatus, TelemetrySnapshot } from "@/lib/schemas/telemetry";
+import type { TelemetrySnapshot } from "@/lib/schemas/telemetry";
 
 const BAKED_SIZE = 16 * 4; // CELL_PX (bakeSprite.ts) * 16 cells
 const AGENT_IDS: AgentId[] = ["orion", "vulcan", "tesla", "mercury", "athena"];
@@ -65,39 +66,47 @@ function drawAgentSprites(
   return agents;
 }
 
-// Multiplicative sprite tints, applied over the baked texture rather
-// than a second baked texture: status overriding identity is ADR-0005's
-// existing rule, this is that rule expressed via Sprite.tint instead of
-// a fill colour. #121 replaces this with the researched palette-swap
-// treatment (#113); this is the minimum needed for #117's own DoD,
-// status still visibly overrides identity.
-const STATUS_TINT: Partial<Record<NodeStatus, number>> = {
-  degraded: 0xffaa33,
-  critical: 0xff3344,
-};
+interface AlarmSprite {
+  sprite: Sprite;
+  normal: Texture;
+  alarm: Texture;
+}
 
+// A palette swap, not GlowFilter (#113's confirmed research: a flat
+// tint/filter bleeds through a detailed sprite's internal gaps, 318
+// distinct colours against a swap's exact 6). The alarm sprite's own
+// blink is driven by the shared ticker below, not per-node timers.
 function drawRoomSprites(
   app: PixiApplication,
   viewport: Viewport,
   snapshot: TelemetrySnapshot,
   floorPlan: FloorPlan,
   tileToWorld: (tile: TilePosition) => Point,
-): void {
+): AlarmSprite[] {
   const textures = bakeNodeTextures(app);
+  const alarms: AlarmSprite[] = [];
 
   for (const node of snapshot.nodes) {
     const tile = floorPlan.rooms.get(node.id);
     if (!tile) continue;
     const { x, y } = tileToWorld(tile);
 
-    const sprite = new Sprite(textures[node.type]);
+    const normal = textures[node.type];
+    const sprite = new Sprite(normal);
     sprite.anchor.set(0.5);
     sprite.x = x;
     sprite.y = y;
     sprite.scale.set(TILE_SIZE / BAKED_SIZE);
-    sprite.tint = STATUS_TINT[node.status] ?? 0xffffff;
     viewport.addChild(sprite);
+
+    if (ALARM_STATUSES.has(node.status)) {
+      const color = alarmColorForNode(node.id, node.status, snapshot.activeFaults);
+      const alarm = bakeAlarmNodeTexture(app, node.type, color);
+      alarms.push({ sprite, normal, alarm });
+    }
   }
+
+  return alarms;
 }
 
 interface FlowPulse {
@@ -221,12 +230,17 @@ export function TileConsole({ snapshot, messages }: TileConsoleProps) {
         const floorPlan = buildFloorPlan(snapshot);
         const { viewport, tileToWorld } = createTileViewport(app, floorPlan);
         app.stage.addChild(viewport);
-        drawRoomSprites(app, viewport, snapshot, floorPlan, tileToWorld);
+        const alarms = drawRoomSprites(app, viewport, snapshot, floorPlan, tileToWorld);
         const pulses = drawCorridors(app, viewport, snapshot, floorPlan, tileToWorld);
         const agents = drawAgentSprites(app, viewport, floorPlan, tileToWorld);
         sceneRef.current = { floorPlan, tileToWorld, agents };
 
         app.ticker.add((ticker) => {
+          if (alarms.length > 0) {
+            const showAlarm = (performance.now() % ALARM_BLINK_PERIOD_MS) / ALARM_BLINK_PERIOD_MS < 0.5;
+            for (const alarm of alarms) alarm.sprite.texture = showAlarm ? alarm.alarm : alarm.normal;
+          }
+
           for (const pulse of pulses) {
             pulse.phase = (pulse.phase + pulse.speed * ticker.deltaMS) % pulse.length;
             const point = pointAtDistance(pulse.polyline, pulse.phase);
