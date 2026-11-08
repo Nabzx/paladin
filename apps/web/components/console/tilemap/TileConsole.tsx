@@ -7,7 +7,7 @@ import { Sprite } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import { buildFloorPlan } from "@/lib/floorplan/buildFloorPlan";
 import type { FloorPlan, TilePosition } from "@/lib/floorplan/buildFloorPlan";
-import { createTileViewport, TILE_SIZE } from "@/lib/floorplan/tileCamera";
+import { createTileViewport, focusOnPoints, TILE_SIZE } from "@/lib/floorplan/tileCamera";
 import { bakeAlarmNodeTexture, bakeNodeTextures } from "@/lib/sprites/nodeSprites";
 import { bakeCorridorTextures } from "@/lib/sprites/corridorSprites";
 import { bakeAgentTextures } from "@/lib/sprites/agentSprites";
@@ -174,6 +174,8 @@ function drawCorridors(
 }
 
 interface SceneRefs {
+  app: PixiApplication;
+  viewport: Viewport;
   floorPlan: FloorPlan;
   tileToWorld: (tile: TilePosition) => Point;
   agents: Map<AgentId, AgentState>;
@@ -192,6 +194,20 @@ function handleAgentMessage(scene: SceneRefs, message: AgentMessage): void {
 
   const walk = startAgentWalk(scene.floorPlan, agent.tile, targetTile, scene.tileToWorld);
   if (walk) agent.walk = walk;
+}
+
+// #63's camera auto-focus, reworked for the tile grid (#124): the
+// same two cases (single node sits at a fixed zoom, two or more fit
+// their own bounding box), just over tile->world points instead of
+// the old arbitrary float positions.
+function handleFaultAlert(scene: SceneRefs, message: AgentMessage): void {
+  const affectedNodeIds = message.payload.affectedNodeIds;
+  if (!Array.isArray(affectedNodeIds)) return;
+  const points = affectedNodeIds
+    .map((id) => (typeof id === "string" ? scene.floorPlan.rooms.get(id) : undefined))
+    .filter((tile): tile is TilePosition => tile !== undefined)
+    .map(scene.tileToWorld);
+  focusOnPoints(scene.app, scene.viewport, points);
 }
 
 interface TileConsoleProps {
@@ -217,7 +233,8 @@ export function TileConsole({ snapshot, messages }: TileConsoleProps) {
     for (const message of messages) {
       if (seen.has(message.messageId)) continue;
       seen.add(message.messageId);
-      handleAgentMessage(scene, message);
+      if (message.type === "fault_alert") handleFaultAlert(scene, message);
+      else handleAgentMessage(scene, message);
     }
   }, [messages]);
 
@@ -233,7 +250,7 @@ export function TileConsole({ snapshot, messages }: TileConsoleProps) {
         const alarms = drawRoomSprites(app, viewport, snapshot, floorPlan, tileToWorld);
         const pulses = drawCorridors(app, viewport, snapshot, floorPlan, tileToWorld);
         const agents = drawAgentSprites(app, viewport, floorPlan, tileToWorld);
-        sceneRef.current = { floorPlan, tileToWorld, agents };
+        sceneRef.current = { app, viewport, floorPlan, tileToWorld, agents };
 
         app.ticker.add((ticker) => {
           if (alarms.length > 0) {
