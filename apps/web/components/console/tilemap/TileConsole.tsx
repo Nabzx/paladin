@@ -6,13 +6,52 @@ import type { Application as PixiApplication } from "pixi.js";
 import { Sprite } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import { buildFloorPlan } from "@/lib/floorplan/buildFloorPlan";
+import type { TilePosition } from "@/lib/floorplan/buildFloorPlan";
 import { createTileViewport, TILE_SIZE } from "@/lib/floorplan/tileCamera";
 import { bakeNodeTextures } from "@/lib/sprites/nodeSprites";
 import { bakeCorridorTextures } from "@/lib/sprites/corridorSprites";
+import { bakeAgentTextures } from "@/lib/sprites/agentSprites";
 import { corridorPolyline, FLOW_SPEED_SCALE, pointAtDistance, polylineLength } from "@/lib/sprites/corridorFlow";
+import type { AgentId } from "@/lib/schemas/agent-protocol";
 import type { NodeStatus, TelemetrySnapshot } from "@/lib/schemas/telemetry";
 
 const BAKED_SIZE = 16 * 4; // CELL_PX (bakeSprite.ts) * 16 cells
+
+const AGENT_IDS: AgentId[] = ["orion", "vulcan", "tesla", "mercury", "athena"];
+
+// A fixed "standby" row above the floor plan, evenly spaced: #112's
+// recommendation for an agent not currently walking anywhere.
+// Movement between tiles is #120's own ticket, this is just the
+// resting position #119's DoD asks for.
+function standbyTiles(floorPlan: ReturnType<typeof buildFloorPlan>): TilePosition[] {
+  const roomTiles = [...floorPlan.rooms.values()];
+  const minX = Math.min(...roomTiles.map((t) => t.x));
+  const maxX = Math.max(...roomTiles.map((t) => t.x));
+  const minY = Math.min(...roomTiles.map((t) => t.y));
+  const y = minY - 2;
+  const span = maxX - minX;
+  return AGENT_IDS.map((_, i) => ({ x: minX + Math.round((span * i) / (AGENT_IDS.length - 1)), y }));
+}
+
+function drawAgentSprites(
+  app: PixiApplication,
+  viewport: Viewport,
+  floorPlan: ReturnType<typeof buildFloorPlan>,
+  tileToWorld: (tile: TilePosition) => { x: number; y: number },
+): void {
+  const textures = bakeAgentTextures(app);
+  const tiles = standbyTiles(floorPlan);
+
+  AGENT_IDS.forEach((id, i) => {
+    const { x, y } = tileToWorld(tiles[i]);
+    const sprite = new Sprite(textures[id]);
+    sprite.anchor.set(0.5);
+    sprite.x = x;
+    sprite.y = y;
+    sprite.scale.set(TILE_SIZE / BAKED_SIZE);
+    viewport.addChild(sprite);
+  });
+}
 
 // Multiplicative sprite tints, applied over the baked texture rather
 // than a second baked texture: status overriding identity is ADR-0005's
@@ -134,6 +173,7 @@ export function TileConsole({ snapshot }: TileConsoleProps) {
         app.stage.addChild(viewport);
         drawRoomSprites(app, viewport, snapshot, floorPlan, tileToWorld);
         const pulses = drawCorridors(app, viewport, snapshot, floorPlan, tileToWorld);
+        drawAgentSprites(app, viewport, floorPlan, tileToWorld);
 
         app.ticker.add((ticker) => {
           for (const pulse of pulses) {
