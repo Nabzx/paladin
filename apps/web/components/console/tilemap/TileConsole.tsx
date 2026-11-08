@@ -3,8 +3,9 @@
 import { useEffect, useRef } from "react";
 import { Application } from "@pixi/react";
 import type { Application as PixiApplication, Texture } from "pixi.js";
-import { Sprite } from "pixi.js";
+import { Graphics, Sprite } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
+import { CRTFilter } from "pixi-filters";
 import { buildFloorPlan } from "@/lib/floorplan/buildFloorPlan";
 import type { FloorPlan, TilePosition } from "@/lib/floorplan/buildFloorPlan";
 import { createTileViewport, focusOnPoints, TILE_SIZE } from "@/lib/floorplan/tileCamera";
@@ -22,6 +23,30 @@ import type { TelemetrySnapshot } from "@/lib/schemas/telemetry";
 const BAKED_SIZE = 16 * 4; // CELL_PX (bakeSprite.ts) * 16 cells
 const AGENT_IDS: AgentId[] = ["orion", "vulcan", "tesla", "mercury", "athena"];
 const AGENT_WALK_SPEED = TILE_SIZE / WALK_MS_PER_TILE; // px/ms
+
+// Ported verbatim from Console.tsx (#56): tuned against the console's
+// actual #05080a background, not CRTFilter's generic defaults, which
+// are visibly too heavy here, the console needs to stay legible
+// (labels, status colours) over aesthetic flourish.
+const CRT_OPTIONS = {
+  curvature: 2,
+  lineWidth: 1,
+  lineContrast: 0.3,
+  noise: 0.12,
+  noiseSize: 1,
+  vignetting: 0.3,
+  vignettingAlpha: 0.6,
+  vignettingBlur: 0.4,
+};
+
+// Ported verbatim from Console.tsx (#57): a short, decaying burst of
+// flashes, not a sustained effect, distinct from the stage's constant
+// CRTFilter. Deterministic (a function of elapsed time only, no
+// per-frame randomness) so the render is reproducible for live pixel
+// verification.
+const FLICKER_DURATION_MS = 260;
+const FLICKER_FLASHES = 5;
+const FLICKER_MAX_ALPHA = 0.55;
 
 // A fixed "standby" row above the floor plan, evenly spaced: #112's
 // recommendation for an agent not currently walking anywhere.
@@ -179,6 +204,8 @@ interface SceneRefs {
   floorPlan: FloorPlan;
   tileToWorld: (tile: TilePosition) => Point;
   agents: Map<AgentId, AgentState>;
+  flickerOverlay: Graphics;
+  flickerStartMs: number | null;
 }
 
 // A status_broadcast or fix_proposal naming a node sends that message's
@@ -201,6 +228,8 @@ function handleAgentMessage(scene: SceneRefs, message: AgentMessage): void {
 // their own bounding box), just over tile->world points instead of
 // the old arbitrary float positions.
 function handleFaultAlert(scene: SceneRefs, message: AgentMessage): void {
+  scene.flickerStartMs = performance.now();
+
   const affectedNodeIds = message.payload.affectedNodeIds;
   if (!Array.isArray(affectedNodeIds)) return;
   const points = affectedNodeIds
@@ -250,7 +279,25 @@ export function TileConsole({ snapshot, messages }: TileConsoleProps) {
         const alarms = drawRoomSprites(app, viewport, snapshot, floorPlan, tileToWorld);
         const pulses = drawCorridors(app, viewport, snapshot, floorPlan, tileToWorld);
         const agents = drawAgentSprites(app, viewport, floorPlan, tileToWorld);
-        sceneRef.current = { app, viewport, floorPlan, tileToWorld, agents };
+
+        // Stage-level, not per-object (ported verbatim from Console.tsx,
+        // #56): a CRT effect simulates a physical screen, it should stay
+        // fixed in screen space regardless of how the viewport inside it
+        // pans or zooms. filterArea is pinned to the renderer's screen
+        // rect, not left to auto-compute from content bounds, which
+        // would shift as the viewport's visible content changes.
+        app.stage.filters = [new CRTFilter(CRT_OPTIONS)];
+        app.stage.filterArea = app.renderer.screen;
+
+        // Drawn directly on the stage, after the viewport, so it sits on
+        // top of the floor plan and still passes through the same
+        // CRTFilter. Empty until a flicker is active, so it costs
+        // nothing the rest of the time.
+        const flickerOverlay = new Graphics();
+        app.stage.addChild(flickerOverlay);
+
+        sceneRef.current = { app, viewport, floorPlan, tileToWorld, agents, flickerOverlay, flickerStartMs: null };
+        const scene = sceneRef.current;
 
         app.ticker.add((ticker) => {
           if (alarms.length > 0) {
@@ -274,6 +321,25 @@ export function TileConsole({ snapshot, messages }: TileConsoleProps) {
             if (agent.walk.traveled >= agent.walk.length) {
               agent.tile = agent.walk.targetTile;
               agent.walk = null;
+            }
+          }
+
+          // Ported verbatim from Console.tsx (#57). Redrawn fresh each
+          // active frame (not sized once at creation) so it always
+          // matches the current renderer size, resizeTo={window} can
+          // change that mid-burst.
+          if (scene.flickerStartMs !== null) {
+            const elapsed = performance.now() - scene.flickerStartMs;
+            if (elapsed >= FLICKER_DURATION_MS) {
+              scene.flickerOverlay.clear();
+              scene.flickerStartMs = null;
+            } else {
+              const progress = elapsed / FLICKER_DURATION_MS;
+              const alpha = Math.abs(Math.sin(progress * FLICKER_FLASHES * Math.PI)) * (1 - progress) * FLICKER_MAX_ALPHA;
+              scene.flickerOverlay
+                .clear()
+                .rect(0, 0, app.renderer.width, app.renderer.height)
+                .fill({ color: 0xffffff, alpha });
             }
           }
         });
