@@ -18,7 +18,10 @@ export interface FloorPlan {
 // sample topology, see #111's research.
 const ROOM_SCALE = 40;
 
-function tileKey(t: TilePosition): string {
+// Exported so #120's agent movement can build an occupied set in the
+// exact key format buildCorridor expects, reusing this routing rather
+// than inventing a second pathing system (#112's explicit recommendation).
+export function tileKey(t: TilePosition): string {
   return `${t.x},${t.y}`;
 }
 
@@ -104,7 +107,9 @@ function bfsPath(a: TilePosition, b: TilePosition, occupied: Set<string>): TileP
   return path;
 }
 
-function buildCorridor(a: TilePosition, b: TilePosition, occupied: Set<string>): TilePosition[] {
+// Exported for #120: an agent walking to a node should route around the
+// same rooms a corridor would, not phase through them.
+export function buildCorridor(a: TilePosition, b: TilePosition, occupied: Set<string>): TilePosition[] {
   const horizontalFirst = lBendPath(a, b, false);
   if (!pathCollides(horizontalFirst, occupied, a, b)) return horizontalFirst;
 

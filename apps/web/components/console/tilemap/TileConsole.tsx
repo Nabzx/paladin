@@ -1,29 +1,30 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Application } from "@pixi/react";
 import type { Application as PixiApplication } from "pixi.js";
 import { Sprite } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import { buildFloorPlan } from "@/lib/floorplan/buildFloorPlan";
-import type { TilePosition } from "@/lib/floorplan/buildFloorPlan";
+import type { FloorPlan, TilePosition } from "@/lib/floorplan/buildFloorPlan";
 import { createTileViewport, TILE_SIZE } from "@/lib/floorplan/tileCamera";
 import { bakeNodeTextures } from "@/lib/sprites/nodeSprites";
 import { bakeCorridorTextures } from "@/lib/sprites/corridorSprites";
 import { bakeAgentTextures } from "@/lib/sprites/agentSprites";
 import { corridorPolyline, FLOW_SPEED_SCALE, pointAtDistance, polylineLength } from "@/lib/sprites/corridorFlow";
-import type { AgentId } from "@/lib/schemas/agent-protocol";
+import type { Point } from "@/lib/sprites/corridorFlow";
+import { startAgentWalk, targetNodeIdFromMessage, WALK_MS_PER_TILE } from "@/lib/sprites/agentMovement";
+import type { AgentWalk } from "@/lib/sprites/agentMovement";
+import type { AgentId, AgentMessage } from "@/lib/schemas/agent-protocol";
 import type { NodeStatus, TelemetrySnapshot } from "@/lib/schemas/telemetry";
 
 const BAKED_SIZE = 16 * 4; // CELL_PX (bakeSprite.ts) * 16 cells
-
 const AGENT_IDS: AgentId[] = ["orion", "vulcan", "tesla", "mercury", "athena"];
+const AGENT_WALK_SPEED = TILE_SIZE / WALK_MS_PER_TILE; // px/ms
 
 // A fixed "standby" row above the floor plan, evenly spaced: #112's
 // recommendation for an agent not currently walking anywhere.
-// Movement between tiles is #120's own ticket, this is just the
-// resting position #119's DoD asks for.
-function standbyTiles(floorPlan: ReturnType<typeof buildFloorPlan>): TilePosition[] {
+function standbyTiles(floorPlan: FloorPlan): TilePosition[] {
   const roomTiles = [...floorPlan.rooms.values()];
   const minX = Math.min(...roomTiles.map((t) => t.x));
   const maxX = Math.max(...roomTiles.map((t) => t.x));
@@ -33,24 +34,35 @@ function standbyTiles(floorPlan: ReturnType<typeof buildFloorPlan>): TilePositio
   return AGENT_IDS.map((_, i) => ({ x: minX + Math.round((span * i) / (AGENT_IDS.length - 1)), y }));
 }
 
+interface AgentState {
+  sprite: Sprite;
+  tile: TilePosition;
+  walk: AgentWalk | null;
+}
+
 function drawAgentSprites(
   app: PixiApplication,
   viewport: Viewport,
-  floorPlan: ReturnType<typeof buildFloorPlan>,
-  tileToWorld: (tile: TilePosition) => { x: number; y: number },
-): void {
+  floorPlan: FloorPlan,
+  tileToWorld: (tile: TilePosition) => Point,
+): Map<AgentId, AgentState> {
   const textures = bakeAgentTextures(app);
   const tiles = standbyTiles(floorPlan);
+  const agents = new Map<AgentId, AgentState>();
 
   AGENT_IDS.forEach((id, i) => {
-    const { x, y } = tileToWorld(tiles[i]);
+    const tile = tiles[i];
+    const { x, y } = tileToWorld(tile);
     const sprite = new Sprite(textures[id]);
     sprite.anchor.set(0.5);
     sprite.x = x;
     sprite.y = y;
     sprite.scale.set(TILE_SIZE / BAKED_SIZE);
     viewport.addChild(sprite);
+    agents.set(id, { sprite, tile, walk: null });
   });
+
+  return agents;
 }
 
 // Multiplicative sprite tints, applied over the baked texture rather
@@ -68,8 +80,8 @@ function drawRoomSprites(
   app: PixiApplication,
   viewport: Viewport,
   snapshot: TelemetrySnapshot,
-  floorPlan: ReturnType<typeof buildFloorPlan>,
-  tileToWorld: (tile: { x: number; y: number }) => { x: number; y: number },
+  floorPlan: FloorPlan,
+  tileToWorld: (tile: TilePosition) => Point,
 ): void {
   const textures = bakeNodeTextures(app);
 
@@ -91,7 +103,7 @@ function drawRoomSprites(
 interface FlowPulse {
   edgeId: string;
   sprite: Sprite;
-  polyline: { x: number; y: number }[];
+  polyline: Point[];
   length: number;
   speed: number;
   phase: number;
@@ -100,14 +112,12 @@ interface FlowPulse {
 // Draws the static pipe tiles for every corridor (severed edges get the
 // broken variant, #52's rule: nothing flows through a line that can't
 // carry it), and sets up one travelling pulse sprite per animated edge.
-// The pulse's own ticker loop is returned so the caller can start it
-// once, rather than rebuilding on every snapshot.
 function drawCorridors(
   app: PixiApplication,
   viewport: Viewport,
   snapshot: TelemetrySnapshot,
-  floorPlan: ReturnType<typeof buildFloorPlan>,
-  tileToWorld: (tile: { x: number; y: number }) => { x: number; y: number },
+  floorPlan: FloorPlan,
+  tileToWorld: (tile: TilePosition) => Point,
 ): FlowPulse[] {
   const textures = bakeCorridorTextures(app);
   const pulses: FlowPulse[] = [];
@@ -154,26 +164,67 @@ function drawCorridors(
   return pulses;
 }
 
-interface TileConsoleProps {
-  snapshot: TelemetrySnapshot | null;
+interface SceneRefs {
+  floorPlan: FloorPlan;
+  tileToWorld: (tile: TilePosition) => Point;
+  agents: Map<AgentId, AgentState>;
 }
 
-export function TileConsole({ snapshot }: TileConsoleProps) {
-  const builtRef = useRef(false);
+// A status_broadcast or fix_proposal naming a node sends that message's
+// sender walking there, #112's recommendation, reusing the agent-
+// protocol stream already driving the Operations Deck (#86), not new
+// backend work.
+function handleAgentMessage(scene: SceneRefs, message: AgentMessage): void {
+  const nodeId = targetNodeIdFromMessage(message);
+  if (!nodeId) return;
+  const agent = scene.agents.get(message.from);
+  const targetTile = scene.floorPlan.rooms.get(nodeId);
+  if (!agent || !targetTile) return;
+
+  const walk = startAgentWalk(scene.floorPlan, agent.tile, targetTile, scene.tileToWorld);
+  if (walk) agent.walk = walk;
+}
+
+interface TileConsoleProps {
+  snapshot: TelemetrySnapshot | null;
+  messages: AgentMessage[];
+}
+
+export function TileConsole({ snapshot, messages }: TileConsoleProps) {
+  const sceneRef = useRef<SceneRefs | null>(null);
+  const seenMessageIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene || messages.length === 0) return;
+    // Every new message, found by set membership rather than "since
+    // the last array index": React can batch several socket.onmessage
+    // updates into one render (a fault's trace often carries more than
+    // one node-naming message, ORION's own status then MERCURY's fix
+    // proposal, in the same batch), and useStationSocket's MAX_MESSAGES
+    // cap can shift an already-seen id out of the array entirely, which
+    // an index-based "last seen" check would mistake for never-seen.
+    const seen = seenMessageIdsRef.current;
+    for (const message of messages) {
+      if (seen.has(message.messageId)) continue;
+      seen.add(message.messageId);
+      handleAgentMessage(scene, message);
+    }
+  }, [messages]);
 
   return (
     <Application
       background="#05080a"
       resizeTo={window}
       onInit={(app: PixiApplication) => {
-        if (builtRef.current || !snapshot) return;
-        builtRef.current = true;
+        if (sceneRef.current || !snapshot) return;
         const floorPlan = buildFloorPlan(snapshot);
         const { viewport, tileToWorld } = createTileViewport(app, floorPlan);
         app.stage.addChild(viewport);
         drawRoomSprites(app, viewport, snapshot, floorPlan, tileToWorld);
         const pulses = drawCorridors(app, viewport, snapshot, floorPlan, tileToWorld);
-        drawAgentSprites(app, viewport, floorPlan, tileToWorld);
+        const agents = drawAgentSprites(app, viewport, floorPlan, tileToWorld);
+        sceneRef.current = { floorPlan, tileToWorld, agents };
 
         app.ticker.add((ticker) => {
           for (const pulse of pulses) {
@@ -181,6 +232,18 @@ export function TileConsole({ snapshot }: TileConsoleProps) {
             const point = pointAtDistance(pulse.polyline, pulse.phase);
             pulse.sprite.x = point.x;
             pulse.sprite.y = point.y;
+          }
+
+          for (const agent of agents.values()) {
+            if (!agent.walk) continue;
+            agent.walk.traveled = Math.min(agent.walk.length, agent.walk.traveled + AGENT_WALK_SPEED * ticker.deltaMS);
+            const point = pointAtDistance(agent.walk.polyline, agent.walk.traveled);
+            agent.sprite.x = point.x;
+            agent.sprite.y = point.y;
+            if (agent.walk.traveled >= agent.walk.length) {
+              agent.tile = agent.walk.targetTile;
+              agent.walk = null;
+            }
           }
         });
       }}
