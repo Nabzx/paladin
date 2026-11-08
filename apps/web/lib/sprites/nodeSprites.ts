@@ -31,3 +31,11 @@ export function bakeNodeTextures(app: PixiApplication): Record<NodeType, Texture
   }
   return textures;
 }
+
+// A palette swap, not a filter (#113's confirmed research): the same
+// grid, the same structural tones, only the accent (L) cell recoloured
+// to the alarm colour, so the alarm reads as "this is now red", not a
+// blur bleeding through the sprite's internal detail.
+export function bakeAlarmNodeTexture(app: PixiApplication, type: NodeType, color: number): Texture {
+  return bakeSprite(app, NODE_GRID[type], { ...NODE_PALETTE[type], L: color });
+}
