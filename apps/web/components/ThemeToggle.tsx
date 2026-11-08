@@ -18,7 +18,7 @@ export function ThemeToggle({ theme, onToggle }: ThemeToggleProps) {
       aria-pressed={isLight}
       aria-label={isLight ? "Switch the chrome to dark" : "Switch the chrome to light"}
       title={isLight ? "Chrome: light" : "Chrome: dark"}
-      className="pointer-events-auto flex items-center gap-1.5 border border-[var(--chrome-border)] bg-[var(--chrome-bg)] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--chrome-text-secondary)] transition-colors hover:border-emerald-400 hover:text-emerald-400"
+      className="font-pixel-display pointer-events-auto flex items-center gap-1.5 border-2 border-[var(--chrome-border)] bg-[var(--chrome-bg)] px-2 py-1.5 text-[8px] uppercase tracking-[0.1em] text-[var(--chrome-text-secondary)] transition-colors hover:border-emerald-400 hover:text-emerald-400"
     >
       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         {isLight ? (

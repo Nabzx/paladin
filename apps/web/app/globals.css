@@ -48,3 +48,70 @@ body {
   --chrome-text-secondary: #52525b;
   --chrome-text-tertiary: #3f3f46;
 }
+
+.font-pixel-display {
+  font-family: var(--font-pixel-display), monospace;
+}
+
+.font-pixel-body {
+  font-family: var(--font-pixel-body), monospace;
+}
+
+/* An RPG dialogue box's stepped corners and double-line frame (#122),
+   pure CSS, no border-image asset: a sharp two-step notch per corner
+   (clip-path) reads as "cut from a tile sheet" the way a chamfered or
+   rounded corner never would, and the inset box-shadow is the frame's
+   inner highlight line, the second half of a classic 9-slice box's
+   double border. Border colour is left to each caller (inline
+   style/border-color), this class only supplies the shape. */
+.pixel-panel {
+  --pixel-notch: 6px;
+  border-width: 3px;
+  border-style: solid;
+  box-shadow: inset 0 0 0 2px var(--chrome-border-dim);
+  clip-path: polygon(
+    0 var(--pixel-notch),
+    var(--pixel-notch) var(--pixel-notch),
+    var(--pixel-notch) 0,
+    calc(100% - var(--pixel-notch)) 0,
+    calc(100% - var(--pixel-notch)) var(--pixel-notch),
+    100% var(--pixel-notch),
+    100% calc(100% - var(--pixel-notch)),
+    calc(100% - var(--pixel-notch)) calc(100% - var(--pixel-notch)),
+    calc(100% - var(--pixel-notch)) 100%,
+    var(--pixel-notch) 100%,
+    var(--pixel-notch) calc(100% - var(--pixel-notch)),
+    0 calc(100% - var(--pixel-notch))
+  );
+}
+
+.pixel-panel-sm {
+  --pixel-notch: 3px;
+}
+
+/* A chunky, hard-edged thumb/track, no border-radius, so the replay
+   scrubber (#122) reads as the same pixel-art chrome as everything
+   around it instead of the browser's native rounded slider. */
+.pixel-range {
+  appearance: none;
+  background: var(--chrome-border);
+  height: 6px;
+}
+
+.pixel-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #39ff88;
+  border: 2px solid var(--chrome-bg);
+  box-shadow: 0 0 0 1px #39ff88;
+}
+
+.pixel-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #39ff88;
+  border: 2px solid var(--chrome-bg);
+  box-shadow: 0 0 0 1px #39ff88;
+  border-radius: 0;
+}
