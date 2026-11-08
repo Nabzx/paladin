@@ -42,6 +42,44 @@ function playKlaxon(context: AudioContext): void {
   oscillator.stop(now + duration + 0.02);
 }
 
+// Square-wave oscillators, not the klaxon's sawtooth: #114's research
+// confirmed (at the raw PCM sample level, not just by calling the API)
+// that square is the actual NES/Game Boy APU waveform, the defining
+// chiptune sound, where sawtooth reads as a harsher alarm buzz.
+const NOTE_DURATION_SECONDS = 0.08;
+const NOTE_PEAK_GAIN = 0.16;
+
+// A short "blip" per note: fast attack, quick decay, #114's confirmed
+// envelope shape for a chiptune note (not a sustained tone).
+function playNote(context: AudioContext, frequency: number, startTime: number): void {
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = "square";
+  oscillator.frequency.value = frequency;
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(NOTE_PEAK_GAIN, startTime + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + NOTE_DURATION_SECONDS);
+
+  oscillator.start(startTime);
+  oscillator.stop(startTime + NOTE_DURATION_SECONDS + 0.01);
+}
+
+// C5, E5, G5, C6: the classic ascending "coin/success" arpeggio, #114's
+// worked example.
+const COMMIT_NOTES_HZ = [523.25, 659.25, 783.99, 1046.5];
+// The same four notes, descending: #114's recommended "inverse shape"
+// for the rollback/fail cue, distinct from the commit jingle without
+// inventing a second note set.
+const ROLLBACK_NOTES_HZ = [...COMMIT_NOTES_HZ].reverse();
+
+function playArpeggio(context: AudioContext, notesHz: number[]): void {
+  const now = context.currentTime;
+  notesHz.forEach((hz, i) => playNote(context, hz, now + i * NOTE_DURATION_SECONDS));
+}
+
 export interface AlarmKlaxonState {
   muted: boolean;
   toggleMuted: () => void;
@@ -61,7 +99,7 @@ export function useAlarmKlaxon(messages: AgentMessage[]): AlarmKlaxonState {
     return window.localStorage.getItem(MUTE_STORAGE_KEY) === "true";
   });
   const contextRef = useRef<AudioContext | null>(null);
-  const lastMessageIdRef = useRef<string | undefined>(undefined);
+  const seenMessageIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     window.localStorage.setItem(MUTE_STORAGE_KEY, String(muted));
@@ -84,12 +122,22 @@ export function useAlarmKlaxon(messages: AgentMessage[]): AlarmKlaxonState {
     };
   }, []);
 
+  // Every new message, found by set membership rather than "the
+  // array's last entry": a fault's whole resolution trace (fault_alert,
+  // ..., commit or rollback) can arrive batched into one render (the
+  // same real failure #120's agent movement hit and fixed this way),
+  // and missing a commit/rollback cue entirely is worse than the old
+  // single-message check missing an already-redundant intermediate one.
   useEffect(() => {
-    const last = messages[messages.length - 1];
-    if (!last || last.messageId === lastMessageIdRef.current) return;
-    lastMessageIdRef.current = last.messageId;
-    if (last.type === "fault_alert" && !muted && contextRef.current) {
-      playKlaxon(contextRef.current);
+    const seen = seenMessageIdsRef.current;
+    for (const message of messages) {
+      if (seen.has(message.messageId)) continue;
+      seen.add(message.messageId);
+      if (!muted && contextRef.current) {
+        if (message.type === "fault_alert") playKlaxon(contextRef.current);
+        else if (message.type === "commit") playArpeggio(contextRef.current, COMMIT_NOTES_HZ);
+        else if (message.type === "rollback") playArpeggio(contextRef.current, ROLLBACK_NOTES_HZ);
+      }
     }
   }, [messages, muted]);
 
