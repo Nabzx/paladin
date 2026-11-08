@@ -3,12 +3,16 @@
 import { useRef } from "react";
 import { Application } from "@pixi/react";
 import type { Application as PixiApplication } from "pixi.js";
-import { Graphics, Sprite } from "pixi.js";
+import { Sprite } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import { buildFloorPlan } from "@/lib/floorplan/buildFloorPlan";
 import { createTileViewport, TILE_SIZE } from "@/lib/floorplan/tileCamera";
 import { bakeNodeTextures } from "@/lib/sprites/nodeSprites";
+import { bakeCorridorTextures } from "@/lib/sprites/corridorSprites";
+import { corridorPolyline, FLOW_SPEED_SCALE, pointAtDistance, polylineLength } from "@/lib/sprites/corridorFlow";
 import type { NodeStatus, TelemetrySnapshot } from "@/lib/schemas/telemetry";
+
+const BAKED_SIZE = 16 * 4; // CELL_PX (bakeSprite.ts) * 16 cells
 
 // Multiplicative sprite tints, applied over the baked texture rather
 // than a second baked texture: status overriding identity is ADR-0005's
@@ -21,22 +25,6 @@ const STATUS_TINT: Partial<Record<NodeStatus, number>> = {
   critical: 0xff3344,
 };
 
-// Corridor placeholders only, real sprites are #118, not this ticket.
-function drawCorridorPlaceholders(
-  viewport: Viewport,
-  floorPlan: ReturnType<typeof buildFloorPlan>,
-  tileToWorld: (tile: { x: number; y: number }) => { x: number; y: number },
-): void {
-  for (const path of floorPlan.corridors.values()) {
-    for (const tile of path) {
-      const { x, y } = tileToWorld(tile);
-      const corridor = new Graphics();
-      corridor.rect(x - TILE_SIZE / 4, y - TILE_SIZE / 4, TILE_SIZE / 2, TILE_SIZE / 2).fill({ color: 0x1a4d3a });
-      viewport.addChild(corridor);
-    }
-  }
-}
-
 function drawRoomSprites(
   app: PixiApplication,
   viewport: Viewport,
@@ -45,7 +33,6 @@ function drawRoomSprites(
   tileToWorld: (tile: { x: number; y: number }) => { x: number; y: number },
 ): void {
   const textures = bakeNodeTextures(app);
-  const bakedSize = 16 * 4; // CELL_PX (bakeSprite.ts) * 16 cells
 
   for (const node of snapshot.nodes) {
     const tile = floorPlan.rooms.get(node.id);
@@ -56,10 +43,76 @@ function drawRoomSprites(
     sprite.anchor.set(0.5);
     sprite.x = x;
     sprite.y = y;
-    sprite.scale.set(TILE_SIZE / bakedSize);
+    sprite.scale.set(TILE_SIZE / BAKED_SIZE);
     sprite.tint = STATUS_TINT[node.status] ?? 0xffffff;
     viewport.addChild(sprite);
   }
+}
+
+interface FlowPulse {
+  edgeId: string;
+  sprite: Sprite;
+  polyline: { x: number; y: number }[];
+  length: number;
+  speed: number;
+  phase: number;
+}
+
+// Draws the static pipe tiles for every corridor (severed edges get the
+// broken variant, #52's rule: nothing flows through a line that can't
+// carry it), and sets up one travelling pulse sprite per animated edge.
+// The pulse's own ticker loop is returned so the caller can start it
+// once, rather than rebuilding on every snapshot.
+function drawCorridors(
+  app: PixiApplication,
+  viewport: Viewport,
+  snapshot: TelemetrySnapshot,
+  floorPlan: ReturnType<typeof buildFloorPlan>,
+  tileToWorld: (tile: { x: number; y: number }) => { x: number; y: number },
+): FlowPulse[] {
+  const textures = bakeCorridorTextures(app);
+  const pulses: FlowPulse[] = [];
+
+  for (const edge of snapshot.edges) {
+    const path = floorPlan.corridors.get(edge.id);
+    const fromTile = floorPlan.rooms.get(edge.from);
+    if (!path || !fromTile) continue;
+
+    const severed = edge.status === "severed";
+    const texture = severed ? textures.severed : textures.pipe[edge.type];
+
+    for (const tile of path) {
+      const { x, y } = tileToWorld(tile);
+      const pipe = new Sprite(texture);
+      pipe.anchor.set(0.5);
+      pipe.x = x;
+      pipe.y = y;
+      pipe.scale.set(TILE_SIZE / BAKED_SIZE);
+      viewport.addChildAt(pipe, 0);
+    }
+
+    if (severed) continue;
+
+    const polyline = corridorPolyline(fromTile, path, tileToWorld);
+    const length = polylineLength(polyline);
+    if (length === 0) continue;
+
+    const pulse = new Sprite(textures.pipe[edge.type]);
+    pulse.anchor.set(0.5);
+    pulse.scale.set((TILE_SIZE / BAKED_SIZE) * 0.4);
+    viewport.addChild(pulse);
+
+    pulses.push({
+      edgeId: edge.id,
+      sprite: pulse,
+      polyline,
+      length,
+      speed: (edge.currentFlow ?? 0) * FLOW_SPEED_SCALE[edge.type],
+      phase: 0,
+    });
+  }
+
+  return pulses;
 }
 
 interface TileConsoleProps {
@@ -79,8 +132,17 @@ export function TileConsole({ snapshot }: TileConsoleProps) {
         const floorPlan = buildFloorPlan(snapshot);
         const { viewport, tileToWorld } = createTileViewport(app, floorPlan);
         app.stage.addChild(viewport);
-        drawCorridorPlaceholders(viewport, floorPlan, tileToWorld);
         drawRoomSprites(app, viewport, snapshot, floorPlan, tileToWorld);
+        const pulses = drawCorridors(app, viewport, snapshot, floorPlan, tileToWorld);
+
+        app.ticker.add((ticker) => {
+          for (const pulse of pulses) {
+            pulse.phase = (pulse.phase + pulse.speed * ticker.deltaMS) % pulse.length;
+            const point = pointAtDistance(pulse.polyline, pulse.phase);
+            pulse.sprite.x = point.x;
+            pulse.sprite.y = point.y;
+          }
+        });
       }}
     />
   );
