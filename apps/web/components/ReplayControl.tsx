@@ -24,13 +24,16 @@ export function ReplayControl({ history, scrubIndex, playing, onScrub, onGoLive,
   const current = history[sliderValue];
 
   return (
-    <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 w-[28rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 border border-[var(--chrome-border)] bg-[var(--chrome-bg)] px-3 py-2 font-mono">
+    <div
+      className="pixel-panel pointer-events-none absolute bottom-4 left-1/2 z-10 w-[28rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 bg-[var(--chrome-bg)] px-3 py-2"
+      style={{ borderColor: "var(--chrome-border)" }}
+    >
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={onTogglePlaying}
           aria-label={playing ? "Pause replay" : "Play replay"}
-          className="pointer-events-auto border border-[var(--chrome-border-bright)] px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-[var(--chrome-text-secondary)] transition-colors hover:border-emerald-400 hover:text-emerald-400"
+          className="font-pixel-display pointer-events-auto border-2 border-[var(--chrome-border-bright)] px-2 py-1 text-[8px] uppercase tracking-[0.1em] text-[var(--chrome-text-secondary)] transition-colors hover:border-emerald-400 hover:text-emerald-400"
         >
           {playing ? "Pause" : "Play"}
         </button>
@@ -40,14 +43,14 @@ export function ReplayControl({ history, scrubIndex, playing, onScrub, onGoLive,
           max={maxIndex}
           value={sliderValue}
           onChange={(event) => onScrub(Number(event.target.value))}
-          className="pointer-events-auto h-1 flex-1 accent-emerald-400"
+          className="pixel-range pointer-events-auto flex-1"
           aria-label="Scrub recorded incident history"
         />
         <button
           type="button"
           onClick={onGoLive}
           aria-pressed={isLive}
-          className="pointer-events-auto border px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] transition-colors"
+          className="font-pixel-display pointer-events-auto border-2 px-2 py-1 text-[8px] uppercase tracking-[0.1em] transition-colors"
           style={{
             borderColor: isLive ? "#39ff88" : "var(--chrome-border-bright)",
             color: isLive ? "#39ff88" : "var(--chrome-text-secondary)",
@@ -56,7 +59,7 @@ export function ReplayControl({ history, scrubIndex, playing, onScrub, onGoLive,
           Live
         </button>
       </div>
-      <p className="mt-1 text-[10px] uppercase tracking-[0.15em] text-[var(--chrome-text-secondary)]">
+      <p className="font-pixel-body mt-1 text-sm uppercase tracking-[0.15em] text-[var(--chrome-text-secondary)]">
         {isLive ? "Following live" : `Replaying tick ${current.snapshot.tick}`}
       </p>
     </div>
