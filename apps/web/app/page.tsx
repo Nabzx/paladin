@@ -15,9 +15,10 @@ import { useTheme } from "@/lib/theme/useTheme";
 
 // PixiJS needs a real canvas and window, disabling SSR for it avoids
 // sprinkling typeof window guards through the component.
-const Console = dynamic(() => import("@/components/console/Console").then((module) => module.Console), {
-  ssr: false,
-});
+const TileConsole = dynamic(
+  () => import("@/components/console/tilemap/TileConsole").then((module) => module.TileConsole),
+  { ssr: false },
+);
 
 export default function Home() {
   const { status, snapshot, messages } = useStationSocket();
@@ -81,7 +82,7 @@ export default function Home() {
           onTogglePlaying={togglePlaying}
         />
       </div>
-      <Console snapshot={displaySnapshot} messages={displayMessages} />
+      <TileConsole snapshot={displaySnapshot} messages={displayMessages} />
     </main>
   );
 }
